@@ -1,0 +1,212 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.drawerlayout.widget.DrawerLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/drawerLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity">
+
+    <!-- Main Content Container -->
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent">
+
+        <!-- CoordinatorLayout for proper window insets -->
+        <androidx.coordinatorlayout.widget.CoordinatorLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?android:colorBackground">
+
+            <!-- Use a vertical LinearLayout to hold the custom header and content -->
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:orientation="vertical">
+
+                <!-- Custom Header (Active Account Section) with fixed height -->
+                <TextView
+                    android:id="@+id/activeAccountBar"
+                    android:layout_width="match_parent"
+                    android:layout_height="30dp"
+                    android:paddingStart="8dp"
+                    android:paddingEnd="8dp"
+                    android:gravity="center_vertical|start"
+                    android:text="@string/active_account_default"
+                    android:textAppearance="?android:textAppearanceMedium"
+                    android:textStyle="bold"
+                    android:textColor="@color/onBackground"
+                    android:background="@color/myPrimary"/>
+
+                <!-- SwipeRefreshLayout for the main scrollable content -->
+                <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+                    android:id="@+id/swipeRefreshLayout"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1">
+
+                    <ScrollView
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent">
+
+                        <androidx.constraintlayout.widget.ConstraintLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:padding="16dp">
+
+                            <!-- Circular Usage Indicator with overlaid usage text -->
+                            <FrameLayout
+                                android:id="@+id/usageContainer"
+                                android:layout_width="250dp"
+                                android:layout_height="250dp"
+                                app:layout_constraintTop_toTopOf="parent"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent">
+
+                                <com.example.iuserusagenotifier.CircularUsageIndicator
+                                    android:id="@+id/usageIndicatorView"
+                                    android:layout_width="match_parent"
+                                    android:layout_height="match_parent" />
+
+                                <TextView
+                                    android:id="@+id/usageValueText"
+                                    android:layout_width="127dp"
+                                    android:layout_height="88dp"
+                                    android:layout_gravity="center"
+                                    android:text="@string/fetching"
+                                    android:textColor="@color/onBackground"
+                                    android:textSize="24sp"
+                                    android:visibility="invisible" />
+                            </FrameLayout>
+
+                            <!-- Saved Accounts Title -->
+                            <TextView
+                                android:id="@+id/savedAccountsTitle"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:text="@string/saved_accounts"
+                                android:textAppearance="?android:textAppearanceLarge"
+                                android:textColor="@color/onBackground"
+                                app:layout_constraintTop_toBottomOf="@id/usageContainer"
+                                app:layout_constraintStart_toStartOf="parent"
+                                android:layout_marginTop="24dp"/>
+
+                            <!-- RecyclerView for Saved Accounts -->
+                            <androidx.recyclerview.widget.RecyclerView
+                                android:id="@+id/accountsRecyclerView"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                app:layout_constraintTop_toBottomOf="@id/savedAccountsTitle"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                android:layout_marginTop="8dp"
+                                android:background="?android:colorBackground"/>
+
+                            <!-- Notification Interval Section -->
+                            <LinearLayout
+                                android:id="@+id/notificationSection"
+                                android:layout_width="wrap_content"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                app:layout_constraintTop_toBottomOf="@id/accountsRecyclerView"
+                                app:layout_constraintStart_toStartOf="parent"
+                                android:layout_marginTop="16dp">
+
+                                <TextView
+                                    android:id="@+id/notificationLabel"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"
+                                    android:text="@string/notify_me"
+                                    android:textAppearance="?android:textAppearanceMedium"
+                                    android:textColor="@color/onBackground"
+                                    android:layout_marginEnd="8dp"/>
+
+                                <Spinner
+                                    android:id="@+id/notificationIntervalSpinner"
+                                    android:layout_width="wrap_content"
+                                    android:layout_height="wrap_content"/>
+                            </LinearLayout>
+
+                            <!-- Bottom Buttons Section -->
+                            <LinearLayout
+                                android:id="@+id/buttonContainer"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:orientation="horizontal"
+                                app:layout_constraintTop_toBottomOf="@id/notificationSection"
+                                app:layout_constraintStart_toStartOf="parent"
+                                app:layout_constraintEnd_toEndOf="parent"
+                                android:layout_marginTop="16dp">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/showAllUsersUsageButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:layout_marginEnd="8dp"
+                                    android:text="@string/show_usage"/>
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/addAccountButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:layout_weight="1"
+                                    android:text="@string/add_account"/>
+                            </LinearLayout>
+
+
+                        </androidx.constraintlayout.widget.ConstraintLayout>
+                    </ScrollView>
+                </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+            </LinearLayout>
+        </androidx.coordinatorlayout.widget.CoordinatorLayout>
+
+        <!-- Overlay Drawer Handle -->
+        <ImageView
+            android:id="@+id/drawerHandle"
+            android:layout_width="21dp"
+            android:layout_height="16dp"
+            android:layout_gravity="end|top"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="4dp"
+            android:clickable="true"
+            android:contentDescription="@string/open_drawer"
+            android:focusable="true"
+            android:src="@drawable/ic_drawer_handle" />
+    </FrameLayout>
+
+    <!-- Right Sidebar Drawer with Webview Buttons -->
+    <LinearLayout
+        android:id="@+id/rightSidebar"
+        android:layout_width="240dp"
+        android:layout_height="match_parent"
+        android:layout_gravity="end"
+        android:orientation="vertical"
+        android:background="?attr/colorSurface"
+        android:padding="16dp">
+
+        <TextView
+            android:id="@+id/sidebarTitle"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/menu"
+            android:textAppearance="?android:textAppearanceLarge"
+            android:textColor="@color/onBackground"/>
+
+        <Button
+            android:id="@+id/btnIUserWebview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/iuser_webview"
+            android:layout_marginTop="16dp"/>
+
+        <Button
+            android:id="@+id/btnSISWebview"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/sis_webview"
+            android:layout_marginTop="8dp"/>
+    </LinearLayout>
+
+</androidx.drawerlayout.widget.DrawerLayout>

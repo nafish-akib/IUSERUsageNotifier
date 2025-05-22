@@ -1,0 +1,15 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="6dp"
+    android:height="6dp"
+    android:viewportWidth="6"
+    android:viewportHeight="24">
+
+    <!-- Left-pointing triangle, 6×24 viewport -->
+    <path
+        android:fillColor="?attr/colorOnSurface"
+        android:pathData="
+            M6,0
+            L0,12
+            L6,24
+            Z"/>
+</vector>

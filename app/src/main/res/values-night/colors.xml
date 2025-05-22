@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Primary brand colors -->
+    <color name="teal_200">#03DAC5</color>
+    <color name="myPrimary">@color/teal_200</color>
+    <color name="white">#FFFFFF</color>
+    <color name="myOnPrimary">@color/white</color>
+
+    <!-- Standard colors -->
+    <color name="black">#000000</color>
+    <color name="gray">#B3B3B3</color>
+
+    <!-- Additional Material colors -->
+    <!-- Adjust these as needed for dark mode -->
+    <color name="purple_200">#03DAC6</color>
+    <color name="purple_500">#BB86FC</color>
+    <color name="purple_700">#3700B3</color>
+    <color name="amber_500">#FFC107</color>
+
+    <!-- Custom colors -->
+    <color name="gearTint">#FFFFFF</color>
+    <color name="gearBackground">#000000</color>
+    <color name="textPrimary">#FFFFFF</color>
+    <color name="textSecondary">#B3B3B3</color>
+    <color name="surface">#121212</color>
+
+    <!-- Background Colors for dark mode -->
+    <color name="colorBackground">#121212</color>
+    <color name="colorOnBackground">#FFFFFF</color>
+
+    <color name="myPrimaryVariant">#9FA8DA</color>
+    <color name="background">#121212</color>
+    <color name="onBackground">#FFFFFF</color>
+
+
+
+    <color name="colorPrimary">#3F51B5</color>
+    <color name="colorPrimaryVariant">#303F9F</color>
+    <color name="colorOnPrimary">#FFFFFF</color>
+
+    <!-- Usage Indicator Colors -->
+    <color name="usage_green">#4CAF50</color>       <!-- used < 6000 -->
+    <color name="usage_orange">#FFA500</color>      <!-- 6000 <= used < 10000 -->
+    <color name="usage_red">#F44336</color>
+
+    <color name="custom_blue">#2196F3</color>
+</resources>
+

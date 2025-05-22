@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<LinearLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:background="@drawable/notification_bg"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content">
+
+    <!-- Title Text -->
+    <TextView
+        android:id="@+id/usage_title"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Usage Update"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:textColor="#000000" />
+
+    <!-- Horizontal Progress Bar with Red drawable -->
+    <ProgressBar
+        android:id="@+id/usage_progressbar"
+        style="@android:style/Widget.ProgressBar.Horizontal"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:max="12000"
+        android:progress="0"
+        android:progressDrawable="@drawable/progress_red" />
+
+    <!-- Numeric Readout -->
+    <TextView
+        android:id="@+id/usage_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="8dp"
+        android:text="0 / 12000 min"
+        android:textStyle="bold"
+        android:textSize="14sp"
+        android:textColor="#000000" />
+</LinearLayout>

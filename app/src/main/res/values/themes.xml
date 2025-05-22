@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.IUSERUsageNotifier" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Disable forced dark mode to let our custom colors work -->
+        <item name="android:forceDarkAllowed">false</item>
+
+        <!-- Custom Action Bar Size (when using a custom toolbar, you can set its height to this value) -->
+        <item name="actionBarSize">48dp</item>
+
+        <!-- Primary Colors (used in toolbar and for status bar) -->
+        <item name="colorPrimary">@color/myPrimary</item>
+        <item name="colorPrimaryVariant">@color/myPrimaryVariant</item>
+        <item name="colorOnPrimary">@color/myOnPrimary</item>
+
+        <!-- Background and Surface Colors -->
+        <item name="colorOnBackground">@color/onBackground</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="android:windowBackground">@color/background</item>
+
+        <!-- Text Colors -->
+        <item name="android:textColorSecondary">@color/textSecondary</item>
+
+        <!-- Custom Shape Appearance for consistent rounded corners -->
+        <item name="shapeAppearanceOverlay">@style/ShapeAppearance.MyApp</item>
+
+        <!-- Set status bar color to match primary color so it blends with your custom toolbar -->
+        <item name="android:statusBarColor">@color/myPrimary</item>
+        <!-- Specify background and primary text color for layouts -->
+        <item name="android:colorBackground">@color/background</item>
+        <item name="android:textColorPrimary">@color/onBackground</item>
+    </style>
+
+    <style name="ShapeAppearance.MyApp" parent="ShapeAppearance.Material3.SmallComponent">
+        <item name="cornerFamily">rounded</item>
+        <item name="cornerSize">12dp</item>
+    </style>
+</resources>
