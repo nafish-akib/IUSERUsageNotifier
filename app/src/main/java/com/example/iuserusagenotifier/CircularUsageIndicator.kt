@@ -18,7 +18,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
     private var progress: Float = 0f
     private var targetProgress: Float = 0f
 
-    // When showing a static message like "Add Account" or "Network Error"
+    // showing a static message  "Add Account"
     private var staticMessage: String = "Add Account"
 
     // For usage values, we split the text into two parts.
@@ -56,7 +56,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
         typeface = Typeface.create(Typeface.DEFAULT, Typeface.BOLD)
     }
 
-    // Paint for the secondary ("min used") text.
+    // Paint for the "min used" text.
     private val secondaryTextPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         textSize = TypedValue.applyDimension(
             TypedValue.COMPLEX_UNIT_SP,
@@ -66,7 +66,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
         textAlign = Paint.Align.CENTER
     }
 
-    // Set text color based on dark mode.
+    // Setting text color based on dark mode.
     init {
         val nightModeFlags = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         val color = when (nightModeFlags) {
@@ -81,8 +81,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
     // Rectangle defining the bounds of the circle.
     private val rect = RectF()
 
-    /**
-     * Animate progress from its current value to newProgress over 1 second.
+    /** Animating progress from its current value to newProgress over 1 second.
      */
     fun updateProgress(newProgress: Float) {
         // If newProgress is above 12000 and a static message is shown,
@@ -91,20 +90,20 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
             invalidate()
             return
         }
-        // Now we’re animating usage. So, unset the static message flag.
+        // Now we’re animating usage. So, unsetting the static message flag.
         isStaticMessage = false
         targetProgress = newProgress
         ValueAnimator.ofFloat(progress, newProgress).apply {
             duration = 1000
             addUpdateListener { animator ->
                 progress = animator.animatedValue as Float
-                // Change arc color based on progress.
+                // Changing arc color based on progress.
                 when {
                     progress < 6000f -> arcPaint.color = Color.GREEN
                     progress < 10000f -> arcPaint.color = "#FFA500".toColorInt()  // Orange
                     else -> arcPaint.color = Color.RED
                 }
-                // Set the text values:
+                // Setting the text values:
                 primaryText = "${progress.toInt()}"  // e.g., "7025"
                 secondaryText = "min used"
                 invalidate()
@@ -113,8 +112,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
         }
     }
 
-    /**
-     * Update message directly (for static messages like "Add Account" or "Network Error").
+    /** Updating message directly for static messages like "Add Account" or "Network Error".
      */
     fun updateMessage(newMessage: String) {
         staticMessage = newMessage
@@ -122,8 +120,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
         invalidate()
     }
 
-    /**
-     * Immediately display an error message.
+    /** Immediately displaying an error message.
      */
     fun showErrorMessage(message: String) {
         progress = 0f
@@ -143,14 +140,14 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
         // Depending on whether we have a static message or usage data,
         // we draw accordingly.
         if (isStaticMessage) {
-            // Draw the staticMessage in one centered line.
+            // Drawing the staticMessage in one centered line.
             val yPos = height / 2f - (textPaint.descent() + textPaint.ascent()) / 2f
             canvas.drawText(staticMessage, centerX, yPos, textPaint)
         } else {
-            // Draw primaryText (the usage number) on one line...
+            // Drawing (the usage number) on one line...
             val primaryY = height / 2f - (primaryTextPaint.descent() + primaryTextPaint.ascent()) / 2f
             canvas.drawText(primaryText, centerX, primaryY, primaryTextPaint)
-            // And then draw secondaryText ("min used") beneath it.
+            // And then drawing "min used" under it.
             val marginBetweenLines = 10f
             val secondaryY = primaryY + primaryTextPaint.textSize + marginBetweenLines
             canvas.drawText(secondaryText, centerX, secondaryY, secondaryTextPaint)

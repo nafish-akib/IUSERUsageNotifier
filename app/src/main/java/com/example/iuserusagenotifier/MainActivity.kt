@@ -1,24 +1,20 @@
 package com.example.iuserusagenotifier
 
-import android.content.Context
-import androidx.core.content.ContextCompat.getSystemService
-import android.os.Handler
-import android.os.Looper
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
+import android.annotation.SuppressLint
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.view.View
-import android.widget.ArrayAdapter
 import android.widget.AdapterView
+import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.edit
 import androidx.core.view.GravityCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
@@ -28,22 +24,21 @@ import androidx.lifecycle.lifecycleScope
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+import androidx.work.Constraints
+import androidx.work.ExistingPeriodicWorkPolicy
+import androidx.work.NetworkType
+import androidx.work.PeriodicWorkRequestBuilder
+import androidx.work.WorkManager
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
-import com.google.android.material.appbar.MaterialToolbar
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.launch
 import java.lang.reflect.Type
-import androidx.work.Constraints
-import androidx.work.NetworkType
-import androidx.work.PeriodicWorkRequestBuilder
-import androidx.work.ExistingPeriodicWorkPolicy
-import androidx.work.WorkManager
 import java.util.concurrent.TimeUnit
-import androidx.core.content.edit
-
 
 
 data class Account(val username: String, val password: String)
@@ -78,7 +73,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        // Confirm that activity_main.xml is up to date.
+
         setContentView(R.layout.activity_main)
 
         /*/ Schedule a test notification after a 2-second delay
@@ -88,7 +83,7 @@ class MainActivity : AppCompatActivity() {
             UsageNotifier.sendUsageNotification(applicationContext, 9000)
         }, 1000) */
 
-        // Setup drawer and then its handle.
+        // Setting up drawer and then its handle.
         drawerLayout = findViewById(R.id.drawerLayout)
         drawerHandle = findViewById(R.id.drawerHandle)
         drawerHandle.setOnClickListener { drawerLayout.openDrawer(GravityCompat.END) }
@@ -112,14 +107,14 @@ class MainActivity : AppCompatActivity() {
         accountsRecyclerView.layoutManager = LinearLayoutManager(this)
         accountAdapter = AccountAdapter(
             onAccountSelected = { account ->
-                val activePrefs = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+                val activePrefs = getSharedPreferences(prefsActive, MODE_PRIVATE)
                 activePrefs.edit {
                     putString("username", account.username)
                         .putString("password", account.password)
                 }
                 updateActiveAccountDisplay()
                 onCheckUsage()
-                scheduleUsageCheck() // Schedule periodic usage check when an account is selected.
+                scheduleUsageCheck() // Scheduling periodic usage check when an account is selected.
             },
             onRemoveClicked = { account -> removeAccount(account) }
         )
@@ -174,7 +169,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun credentialsExist(): Boolean {
-        val activePrefs = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+        val activePrefs = getSharedPreferences(prefsActive, MODE_PRIVATE)
         val username = activePrefs.getString("username", "") ?: ""
         val password = activePrefs.getString("password", "") ?: ""
         return username.isNotEmpty() && password.isNotEmpty()
@@ -189,7 +184,7 @@ class MainActivity : AppCompatActivity() {
         notificationIntervalSpinner.adapter = spinnerAdapter
 
         // Read the saved value from SharedPreferences (default is 1)
-        val savedInterval = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+        val savedInterval = getSharedPreferences(prefsActive, MODE_PRIVATE)
             .getLong("notification_interval", 1)
 
         // Find the matching index in the numericIntervals array.
@@ -210,7 +205,7 @@ class MainActivity : AppCompatActivity() {
                 ) {
                     // Use the numeric array here for conversion:
                     notificationIntervalHours = numericIntervals[position].toLongOrNull() ?: 1L
-                    getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+                    getSharedPreferences(prefsActive, MODE_PRIVATE)
                         .edit {
                             putLong("notification_interval", notificationIntervalHours)
                         }
@@ -222,6 +217,7 @@ class MainActivity : AppCompatActivity() {
     }
 
 
+    @SuppressLint("SetTextI18n")
     private fun setupButtonListeners() {
         showAllUsersUsageButton.setOnClickListener {
             showAllUsersUsageButton.text = "Loading..."
@@ -236,14 +232,14 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun onCheckUsage(onComplete: (() -> Unit)? = null) {
-        val activePrefs = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+        val activePrefs = getSharedPreferences(prefsActive, MODE_PRIVATE)
         val username = activePrefs.getString("username", "") ?: ""
         val password = activePrefs.getString("password", "") ?: ""
 
         // Check if credentials exist.
         if (username.isEmpty() || password.isEmpty()) {
             // Instead of "Fetching..." or network error,
-            // display a prompt that encourages the user to add an account.
+            // displaying a prompt that encourages the user to add an account.
             usageIndicatorView.updateMessage("Add Account")
             onComplete?.invoke()
             return
@@ -267,7 +263,7 @@ class MainActivity : AppCompatActivity() {
                     // or animating the change when usage > 0.
                     usageIndicatorView.updateProgress(usageData.used.toFloat())
                 }
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 // This catch handles network errors or issues like no Internet/Wi-Fi.
                 usageIndicatorView.showErrorMessage("⚠️ Network Error")
                 Toast.makeText(this@MainActivity, "⚠️ Network Error", Toast.LENGTH_LONG).show()
@@ -279,12 +275,12 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun removeAccount(account: Account) {
-        val sharedPref = getSharedPreferences(prefsAccounts, Context.MODE_PRIVATE)
+        val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
         val json = sharedPref.getString(keyAccounts, "[]")
         val type: Type = object : TypeToken<MutableList<Account>>() {}.type
         val accounts: MutableList<Account> = try {
             gson.fromJson(json, type) ?: mutableListOf()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             mutableListOf()
         }
 
@@ -293,7 +289,7 @@ class MainActivity : AppCompatActivity() {
             Toast.makeText(this, getString(R.string.account_removed), Toast.LENGTH_SHORT).show()
 
             // Check if the removed account is the active account.
-            val activePref = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+            val activePref = getSharedPreferences(prefsActive, MODE_PRIVATE)
             val activeUsername = activePref.getString("username", "")
 
             if (activeUsername == account.username) {
@@ -315,12 +311,12 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun updateAccountsList() {
-            val sharedPref = getSharedPreferences(prefsAccounts, Context.MODE_PRIVATE)
+            val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
             val json = sharedPref.getString(keyAccounts, "[]")
             val type: Type = object : TypeToken<List<Account>>() {}.type
             val accounts: List<Account> = try {
                 gson.fromJson(json, type) ?: emptyList()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 emptyList()
             }
             accountAdapter.submitList(accounts)
@@ -351,12 +347,12 @@ class MainActivity : AppCompatActivity() {
         }
 
         private fun onAddAccount(username: String, password: String) {
-            val sharedPref = getSharedPreferences(prefsAccounts, Context.MODE_PRIVATE)
+            val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
             val json = sharedPref.getString(keyAccounts, "[]")
             val type: Type = object : TypeToken<MutableList<Account>>() {}.type
             val accounts: MutableList<Account> = try {
                 gson.fromJson(json, type) ?: mutableListOf()
-            } catch (e: Exception) {
+            } catch (_: Exception) {
                 mutableListOf()
             }
             if (accounts.any { it.username == username }) {
@@ -367,7 +363,7 @@ class MainActivity : AppCompatActivity() {
             sharedPref.edit().putString(keyAccounts, gson.toJson(accounts)).apply()
             Toast.makeText(this, getString(R.string.account_added), Toast.LENGTH_SHORT).show()
             updateAccountsList()
-            getSharedPreferences(prefsActive, Context.MODE_PRIVATE).edit().apply {
+            getSharedPreferences(prefsActive, MODE_PRIVATE).edit().apply {
                 putString("username", username)
                 putString("password", password)
                 apply()
@@ -378,14 +374,15 @@ class MainActivity : AppCompatActivity() {
         }
 
 
+    @SuppressLint("SetTextI18n")
     private fun showAllUsersUsageDialog() {
         // Get saved accounts from SharedPreferences.
-        val sharedPref = getSharedPreferences(prefsAccounts, Context.MODE_PRIVATE)
+        val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
         val json = sharedPref.getString(keyAccounts, "[]")
         val type: Type = object : TypeToken<List<Account>>() {}.type
         val accounts: List<Account> = try {
             gson.fromJson(json, type) ?: emptyList()
-        } catch (e: Exception) {
+        } catch (_: Exception) {
             emptyList()
         }
 
@@ -404,7 +401,7 @@ class MainActivity : AppCompatActivity() {
                             } else {
                                 "${index + 1}. ${account.username}: ${usageData.used} min used"
                             }
-                        } catch (e: Exception) {
+                        } catch (_: Exception) {
                             "${index + 1}. ${account.username}: Error fetching usage."
                         }
                     }
@@ -429,7 +426,7 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun updateActiveAccountDisplay() {
-            val activePrefs = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+            val activePrefs = getSharedPreferences(prefsActive, MODE_PRIVATE)
             val activeUsername = activePrefs.getString("username", "None") ?: "None"
             activeAccountBar.text = getString(R.string.active_account, activeUsername)
         }
@@ -437,7 +434,7 @@ class MainActivity : AppCompatActivity() {
         // --- Scheduling Periodic Notifications using WorkManager ---
         private fun scheduleUsageCheck() {
             // Get the currently selected interval (in hours) from SharedPreferences.
-            val intervalHours = getSharedPreferences(prefsActive, Context.MODE_PRIVATE)
+            val intervalHours = getSharedPreferences(prefsActive, MODE_PRIVATE)
                 .getLong("notification_interval", 1)
             // Minimum period for PeriodicWorkRequest is 15 minutes.
             if (intervalHours < 1) return

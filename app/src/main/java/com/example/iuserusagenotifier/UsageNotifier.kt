@@ -1,5 +1,6 @@
 package com.example.iuserusagenotifier
 
+import android.annotation.SuppressLint
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -20,32 +21,33 @@ object UsageNotifier {
     private const val CHANNEL_ID = "usage_channel"
     private const val NOTIFICATION_ID = 1
 
-    // New method that uses a custom layout with a horizontal progress bar.
+    // a custom layout with a horizontal progress bar.
+    @SuppressLint("ObsoleteSdkInt")
     fun sendUsageNotification(context: Context, remainingUsage: Int) {
         val maxUsage = 12000
         val percentage = ((12000-remainingUsage.toFloat()) / maxUsage) * 100
 
-        // Choose the appropriate layout resource based on usage.
+        // appropriate layout resource based on usage.
         val layoutRes = when {
-            percentage > 60 -> R.layout.notification_usage_green   // Use green layout
+            percentage > 50 -> R.layout.notification_usage_green   // Use green layout
             percentage > 30 -> R.layout.notification_usage_yellow   // Use yellow layout
             else -> R.layout.notification_usage_red                  // Use red layout
         }
 
-        // Inflate the chosen custom layout.
+        // Inflating the chosen custom layout.
         val remoteViews = RemoteViews(context.packageName, layoutRes)
-        // Update the common fields.
+
         remoteViews.setTextViewText(R.id.usage_title, "\uD83D\uDEF0\uFE0F Internet Usage Update")
-        remoteViews.setTextViewText(R.id.usage_text, "$remainingUsage / $maxUsage min")
+        remoteViews.setTextViewText(R.id.usage_text, "$remainingUsage / $maxUsage min used")
         remoteViews.setProgressBar(R.id.usage_progressbar, maxUsage, remainingUsage, false)
 
-        // Set the text color based on the current mode.
+        // Setting the text color based on the current mode.
         val nightModeFlags = context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK
         val textColor = if (nightModeFlags == Configuration.UI_MODE_NIGHT_YES) Color.WHITE else Color.BLACK
         remoteViews.setTextColor(R.id.usage_title, textColor)
         remoteViews.setTextColor(R.id.usage_text, textColor)
 
-        // Create a NotificationChannel for Android O and above.
+        // Creating a NotificationChannel for Android O and above.
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             val channel = NotificationChannel(
                 CHANNEL_ID,
@@ -59,7 +61,7 @@ object UsageNotifier {
             notificationManager.createNotificationChannel(channel)
         }
 
-        // Prepare a PendingIntent so that tapping the notification opens MainActivity.
+        // Preparing a PendingIntent so that tapping the notification opens MainActivity.
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
         }
@@ -72,11 +74,11 @@ object UsageNotifier {
             else PendingIntent.FLAG_UPDATE_CURRENT
         )
 
-        // Build the notification with the custom layout.
+        // Building the notification with the custom layout.
         val notification = NotificationCompat.Builder(context, CHANNEL_ID)
-            .setSmallIcon(R.drawable.ic_notification)  // Make sure this icon exists.
+            .setSmallIcon(R.drawable.ic_notification)
             .setCustomContentView(remoteViews)
-            .setCustomBigContentView(remoteViews) // For expanded view (if desired)
+            .setCustomBigContentView(remoteViews) // For expanded view
             .setStyle(NotificationCompat.DecoratedCustomViewStyle())
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
@@ -91,7 +93,7 @@ object UsageNotifier {
             return
         }
 
-        // Dispatch the notification.
+        // Dispatching the notification.
         NotificationManagerCompat.from(context).notify(NOTIFICATION_ID, notification)
     }
 }

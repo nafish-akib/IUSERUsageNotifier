@@ -1,4 +1,3 @@
-
 package com.example.iuserusagenotifier
 
 import android.content.BroadcastReceiver
@@ -15,7 +14,7 @@ class BootReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         Log.d("BootReceiver", "Received intent: ${intent.action}")
 
-        // Only handle boot completed action in a manifest-declared receiver.
+
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             if (isConnectedToUniversityWifi(context)) {
                 val activePrefs = context.getSharedPreferences("IUSER_PREFS", Context.MODE_PRIVATE)
@@ -35,7 +34,7 @@ class BootReceiver : BroadcastReceiver() {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
         val network = cm.activeNetwork
         val capabilities = cm.getNetworkCapabilities(network)
-        // Adjust this check if you need to match a particular SSID.
+
         return capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
     }
 }

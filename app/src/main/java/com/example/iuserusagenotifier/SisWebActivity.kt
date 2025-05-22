@@ -1,5 +1,6 @@
 package com.example.iuserusagenotifier
 
+import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.os.Bundle
 import android.view.View
@@ -17,6 +18,7 @@ class SisWebActivity : AppCompatActivity() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar  // Reference to the ProgressBar
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_sis_web)
@@ -24,16 +26,16 @@ class SisWebActivity : AppCompatActivity() {
         // Bind UI components.
         swipeRefreshLayout = findViewById(R.id.swipe_refresh_layout)
         webView = findViewById(R.id.webView)
-        progressBar = findViewById(R.id.progressBar)  // Ensure this is present in your XML layout
+        progressBar = findViewById(R.id.progressBar)
 
         // Enable JavaScript.
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
 
-        // Set up WebViewClient to manage loading state.
+        // Setting up WebViewClient to manage loading state.
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                // Show the ProgressBar when page starts loading.
+                // Showing the ProgressBar when page starts loading.
                 progressBar.visibility = View.VISIBLE
                 super.onPageStarted(view, url, favicon)
             }
@@ -52,11 +54,11 @@ class SisWebActivity : AppCompatActivity() {
 
         // Set up the swipe-to-refresh listener.
         swipeRefreshLayout.setOnRefreshListener {
-            // Reload the webpage on user swipe.
+            // Reloading the webpage on user swipe.
             webView.reload()
         }
 
-        // Handle proper back navigation using OnBackPressedDispatcher.
+        // Handling proper back navigation using OnBackPressedDispatcher.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) {

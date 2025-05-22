@@ -1,9 +1,9 @@
 package com.example.iuserusagenotifier
 
-import android.content.Context
+import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.os.Bundle
-import android.view.View  // Make sure this import is added
+import android.view.View
 import android.webkit.WebSettings
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -20,6 +20,7 @@ class IUserWebActivity : AppCompatActivity() {
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar
 
+    @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_iuser_web)
@@ -29,14 +30,14 @@ class IUserWebActivity : AppCompatActivity() {
         webView = findViewById(R.id.webView)
         progressBar = findViewById(R.id.progressBar)
 
-        // Enable JavaScript.
+        // Enabling JavaScript.
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
 
-        // Set up the WebViewClient to show a loading indicator.
+        // Setting up the WebViewClient to show a loading indicator.
         webView.webViewClient = object : WebViewClient() {
             override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
-                // Show the loading indicator when page starts loading.
+                // Showing the loading indicator when page starts loading.
                 progressBar.visibility = View.VISIBLE
                 super.onPageStarted(view, url, favicon)
             }
@@ -54,8 +55,8 @@ class IUserWebActivity : AppCompatActivity() {
             webView.reload()
         }
 
-        // Use shared preferences to determine if we have credentials.
-        val sharedPreferences = getSharedPreferences("IUSER_PREFS", Context.MODE_PRIVATE)
+        // Using shared preferences to determine if we have credentials.
+        val sharedPreferences = getSharedPreferences("IUSER_PREFS", MODE_PRIVATE)
         val username = sharedPreferences.getString("username", "") ?: ""
         val password = sharedPreferences.getString("password", "") ?: ""
 
@@ -70,7 +71,7 @@ class IUserWebActivity : AppCompatActivity() {
             webView.loadUrl("http://10.220.20.12/index.php/home")
         }
 
-        // Use OnBackPressedDispatcher for proper back navigation.
+        // Using OnBackPressedDispatcher for proper back navigation.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
                 if (webView.canGoBack()) {
