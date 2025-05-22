@@ -9,7 +9,7 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.button.MaterialButton
 
-// Data class representing an account (ensure this is defined somewhere in your project)
+// Data class representing an account
 
 // Updated AccountAdapter using the new item layout IDs.
 class AccountAdapter(
