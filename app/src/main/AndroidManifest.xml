@@ -20,7 +20,6 @@
         android:theme="@style/Theme.IUSERUsageNotifier"
         tools:targetApi="31">
 
-        <!-- Corrected IUserWebActivity: closed properly -->
         <activity
             android:name=".IUserWebActivity"
             android:exported="true" />

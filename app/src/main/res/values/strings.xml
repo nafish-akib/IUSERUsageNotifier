@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">IUSERUsageNotifier</string>
+    <string name="app_name">Iuser</string>
     <string name="remove_account">Remove Selected Account</string>
     <string name="username_hint">Username</string>
     <string name="password_hint">Password</string>
