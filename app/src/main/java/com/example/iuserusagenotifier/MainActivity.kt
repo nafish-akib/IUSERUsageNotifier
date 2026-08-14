@@ -2,10 +2,13 @@ package com.example.iuserusagenotifier
 
 import android.annotation.SuppressLint
 import android.app.AlertDialog
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
 import android.view.View
@@ -272,6 +275,14 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
+        // The IUSER portal is only reachable on the IUT campus Wi-Fi.
+        if (!isConnectedToIUTWifi()) {
+            // Show an animated "waiting for IUT Wi-Fi" state instead of a raw network error.
+            usageIndicatorView.showIndeterminate(getString(R.string.connect_to_iut_wifi))
+            onComplete?.invoke()
+            return
+        }
+
         // Show "Fetching..." initially.
         usageIndicatorView.updateMessage("Fetching...")
 
@@ -290,13 +301,24 @@ class MainActivity : AppCompatActivity() {
                     usageIndicatorView.showErrorMessage(usageData.message)
                 }
             } catch (_: Exception) {
-                // This catch handles network errors or issues like no Internet/Wi-Fi.
-                usageIndicatorView.showErrorMessage("⚠️ Network Error")
-                Toast.makeText(this@MainActivity, "⚠️ Network Error", Toast.LENGTH_LONG).show()
+                // Network dropped mid-fetch: fall back to the friendly Wi-Fi prompt.
+                usageIndicatorView.showIndeterminate(getString(R.string.connect_to_iut_wifi))
             }
             updateActiveAccountDisplay()
             onComplete?.invoke()
         }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun isConnectedToIUTWifi(): Boolean {
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        val network = cm.activeNetwork ?: return false
+        val capabilities = cm.getNetworkCapabilities(network) ?: return false
+        if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return false
+        // minSdk 30, so getTransportInfo() (API 29+) is always available.
+        val wifiInfo = capabilities.transportInfo as? android.net.wifi.WifiInfo ?: return false
+        val ssid = wifiInfo.ssid?.trim('"')?.trim() ?: return false
+        return ssid.contains("IUT", ignoreCase = true)
     }
 
 
@@ -460,14 +482,14 @@ class MainActivity : AppCompatActivity() {
         addTableCell(row, "#", isHeader = true, weight = 0f)
         addTableCell(row, getString(R.string.username_hint), isHeader = true, weight = 1f)
         addTableCell(row, getString(R.string.used), isHeader = true, weight = 1f)
-        addTableCell(row, getString(R.string.remaining), isHeader = true, weight = 0f)
+        addTableCell(row, getString(R.string.remaining), isHeader = true, weight = 1f)
         table.addView(row)
     }
 
     private fun addTableRow(table: TableLayout, cells: List<String>) {
         val row = TableRow(this)
         cells.forEachIndexed { index, text ->
-            addTableCell(row, text, isHeader = false, weight = if (index == 1 || index == 2) 1f else 0f)
+            addTableCell(row, text, isHeader = false, weight = if (index == 0) 0f else 1f)
         }
         table.addView(row)
     }

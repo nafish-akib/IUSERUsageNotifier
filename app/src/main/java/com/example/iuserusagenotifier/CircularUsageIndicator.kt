@@ -11,6 +11,7 @@ import android.graphics.Typeface
 import android.util.AttributeSet
 import android.util.TypedValue
 import android.view.View
+import android.view.animation.LinearInterpolator
 import androidx.core.graphics.toColorInt
 
 class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
@@ -29,6 +30,11 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
 
     // Flag indicating we are showing a static message.
     private var isStaticMessage: Boolean = true
+
+    // Indeterminate (spinning) state used while waiting for IUT Wi-Fi.
+    private var indeterminateAnimator: ValueAnimator? = null
+    private var indeterminateStart: Float = 0f
+    private val indeterminateSweep = 120f
 
     // Paint used to draw the arc.
     private val arcPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -90,6 +96,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
      * The arc color is based on the percentage of the free limit consumed.
      */
     fun updateProgress(newProgress: Float, maxProgress: Float = 12000f) {
+        stopIndeterminate()
         this.maxProgress = maxProgress.coerceAtLeast(1f)
         val target = newProgress.coerceIn(0f, this.maxProgress)
         isStaticMessage = false
@@ -118,6 +125,7 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
 
     /** Shows a static message like "Add Account" or "Fetching...". */
     fun updateMessage(newMessage: String) {
+        stopIndeterminate()
         staticMessage = newMessage
         isStaticMessage = true
         invalidate()
@@ -125,18 +133,52 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
 
     /** Immediately displays an error message. */
     fun showErrorMessage(message: String) {
+        stopIndeterminate()
         progress = 0f
         staticMessage = message
         isStaticMessage = true
         invalidate()
     }
 
+    /**
+     * Shows a continuously spinning arc with [message] in the center.
+     * Used while the app waits for the IUT campus Wi-Fi to be available.
+     */
+    fun showIndeterminate(message: String) {
+        stopIndeterminate()
+        progress = 0f
+        staticMessage = message
+        isStaticMessage = true
+        indeterminateAnimator = ValueAnimator.ofFloat(0f, 360f).apply {
+            duration = 1200
+            repeatCount = ValueAnimator.INFINITE
+            interpolator = LinearInterpolator()
+            addUpdateListener { animator ->
+                indeterminateStart = animator.animatedValue as Float
+                invalidate()
+            }
+            start()
+        }
+        invalidate()
+    }
+
+    private fun stopIndeterminate() {
+        indeterminateAnimator?.cancel()
+        indeterminateAnimator = null
+    }
+
     override fun onDraw(canvas: Canvas) {
         super.onDraw(canvas)
         val padding = 20f
         rect.set(padding, padding, width - padding, height - padding)
-        val sweepAngle = (progress / maxProgress) * 360f
-        canvas.drawArc(rect, -90f, sweepAngle, false, arcPaint)
+        if (indeterminateAnimator != null) {
+            // Spinning arc while waiting (e.g. for IUT Wi-Fi).
+            arcPaint.color = Color.rgb(0, 218, 197) // teal_200
+            canvas.drawArc(rect, indeterminateStart - 90f, indeterminateSweep, false, arcPaint)
+        } else {
+            val sweepAngle = (progress / maxProgress) * 360f
+            canvas.drawArc(rect, -90f, sweepAngle, false, arcPaint)
+        }
 
         val centerX = width / 2f
         if (isStaticMessage) {
@@ -149,5 +191,10 @@ class CircularUsageIndicator(context: Context, attrs: AttributeSet? = null) : Vi
             val secondaryY = primaryY + primaryTextPaint.textSize + marginBetweenLines
             canvas.drawText(secondaryText, centerX, secondaryY, secondaryTextPaint)
         }
+    }
+
+    override fun onDetachedFromWindow() {
+        stopIndeterminate()
+        super.onDetachedFromWindow()
     }
 }
