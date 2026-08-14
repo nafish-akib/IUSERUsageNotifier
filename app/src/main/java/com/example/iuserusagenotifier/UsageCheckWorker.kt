@@ -2,9 +2,9 @@ package com.example.iuserusagenotifier
 
 import android.content.Context
 import android.util.Log
+import androidx.core.content.edit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
-import androidx.core.content.edit
 
 class UsageCheckWorker(context: Context, workerParams: WorkerParameters) :
     CoroutineWorker(context, workerParams) {
@@ -22,15 +22,30 @@ class UsageCheckWorker(context: Context, workerParams: WorkerParameters) :
         return try {
             // Attempt to fetch usage data.
             val usageData = loginAndFetchUsageData(username, password)
-            // Log retrieved usage information.
-            Log.d("UsageCheckWorker", "Usage data fetched: ${usageData.message}")
 
+            // A non-empty message means the fetch failed (e.g. wrong credentials).
+            if (usageData.message.isNotEmpty()) {
+                Log.d("UsageCheckWorker", "Fetch failed: ${usageData.message}")
+                return Result.failure()
+            }
 
-            val currentTime = System.currentTimeMillis()
-            sharedPrefs.edit { putLong("last_fetch_time", currentTime) }
+            Log.d("UsageCheckWorker", "Usage fetched: ${formatDuration(usageData.used)}")
 
-            // Sending the notification using the centralized notifier.
-            UsageNotifier.sendUsageNotification(applicationContext ,usageData.used)
+            sharedPrefs.edit { putLong("last_fetch_time", System.currentTimeMillis()) }
+
+            // Build a human-readable message and send the notification.
+            val message = if (usageData.free > 0L) {
+                "Used: ${formatDuration(usageData.used)} of ${formatDuration(usageData.free)}"
+            } else {
+                "Used: ${formatDuration(usageData.used)}"
+            }
+
+            UsageNotifier.sendUsageNotification(
+                applicationContext,
+                message,
+                usageData.used,
+                usageData.free
+            )
 
             Log.d("UsageCheckWorker", "Notification sent successfully.")
             Result.success()

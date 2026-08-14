@@ -1,21 +1,28 @@
 package com.example.iuserusagenotifier
 
 import android.annotation.SuppressLint
+import android.app.AlertDialog
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
+import android.graphics.Typeface
 import android.os.Build
 import android.os.Bundle
 import android.view.View
+import android.view.ViewGroup
 import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
 import android.widget.Spinner
+import android.widget.TableLayout
+import android.widget.TableRow
 import android.widget.TextView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.edit
 import androidx.core.view.GravityCompat
+import androidx.core.view.ViewCompat
 import androidx.core.view.WindowCompat
 import androidx.core.view.WindowInsetsCompat
 import androidx.core.view.WindowInsetsControllerCompat
@@ -56,7 +63,6 @@ class MainActivity : AppCompatActivity() {
     private lateinit var activeAccountBar: TextView
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var usageIndicatorView: CircularUsageIndicator
-    private lateinit var usageValueText: TextView
     private lateinit var accountsRecyclerView: RecyclerView
     private lateinit var notificationIntervalSpinner: Spinner
     private lateinit var showAllUsersUsageButton: MaterialButton
@@ -102,7 +108,6 @@ class MainActivity : AppCompatActivity() {
         activeAccountBar = findViewById(R.id.activeAccountBar)
         swipeRefreshLayout = findViewById(R.id.swipeRefreshLayout)
         usageIndicatorView = findViewById(R.id.usageIndicatorView)
-        usageValueText = findViewById(R.id.usageValueText)
         accountsRecyclerView = findViewById(R.id.accountsRecyclerView)
         accountsRecyclerView.layoutManager = LinearLayoutManager(this)
         accountAdapter = AccountAdapter(
@@ -116,7 +121,8 @@ class MainActivity : AppCompatActivity() {
                 onCheckUsage()
                 scheduleUsageCheck() // Scheduling periodic usage check when an account is selected.
             },
-            onRemoveClicked = { account -> removeAccount(account) }
+            onRemoveClicked = { account -> removeAccount(account) },
+            onEditClicked = { account -> showChangePasswordDialog(account) }
         )
         accountsRecyclerView.adapter = accountAdapter
 
@@ -153,6 +159,27 @@ class MainActivity : AppCompatActivity() {
         WindowInsetsControllerCompat(window, window.decorView).apply {
             hide(WindowInsetsCompat.Type.statusBars() or WindowInsetsCompat.Type.navigationBars())
             systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+
+        // Top banner: keeps the header below the status bar / camera cutout,
+        // and moves the drawer handle down so it is not covered by the camera.
+        val topBanner = findViewById<View>(R.id.topBanner)
+        val drawerHandleBaseTop = (8 * resources.displayMetrics.density).toInt()
+        ViewCompat.setOnApplyWindowInsetsListener(drawerLayout) { _, insets ->
+            val topInset = maxOf(
+                insets.getInsets(WindowInsetsCompat.Type.displayCutout()).top,
+                insets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+            )
+            if (topBanner.layoutParams.height != topInset) {
+                topBanner.layoutParams = topBanner.layoutParams.apply { height = topInset }
+            }
+            val handleLp = drawerHandle.layoutParams as ViewGroup.MarginLayoutParams
+            val handleTop = drawerHandleBaseTop + topInset
+            if (handleLp.topMargin != handleTop) {
+                handleLp.topMargin = handleTop
+                drawerHandle.layoutParams = handleLp
+            }
+            insets
         }
     }
 
@@ -251,17 +278,16 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             try {
                 val usageData = loginAndFetchUsageData(username, password)
-                // First decide based on the error message returned.
-                if (usageData.message.isNotEmpty()) {
-                    // If the error message is non-empty it indicates a failure (e.g., wrong credentials or data not found).
-                    usageIndicatorView.showErrorMessage(usageData.message)
+                // An empty message means the fetch succeeded.
+                if (usageData.message.isEmpty()) {
+                    // usageData is in seconds; the indicator works in minutes.
+                    val maxMinutes = (usageData.free / 60L).coerceAtLeast(1L)
+                    usageIndicatorView.updateProgress(
+                        (usageData.used / 60L).toFloat(),
+                        maxMinutes.toFloat()
+                    )
                 } else {
-                    // No error message means login succeeded.
-                    // It doesn't matter if usageData.used is 0 or greater than 0;
-                    // the custom view's updateProgress() will handle both,
-                    // displaying "0 min used" when usage is 0
-                    // or animating the change when usage > 0.
-                    usageIndicatorView.updateProgress(usageData.used.toFloat())
+                    usageIndicatorView.showErrorMessage(usageData.message)
                 }
             } catch (_: Exception) {
                 // This catch handles network errors or issues like no Internet/Wi-Fi.
@@ -274,18 +300,27 @@ class MainActivity : AppCompatActivity() {
     }
 
 
-    private fun removeAccount(account: Account) {
-        val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
-        val json = sharedPref.getString(keyAccounts, "[]")
+    private fun loadAccounts(): MutableList<Account> {
+        val json = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
+            .getString(keyAccounts, "[]")
         val type: Type = object : TypeToken<MutableList<Account>>() {}.type
-        val accounts: MutableList<Account> = try {
+        return try {
             gson.fromJson(json, type) ?: mutableListOf()
         } catch (_: Exception) {
             mutableListOf()
         }
+    }
+
+    private fun saveAccounts(accounts: List<Account>) {
+        getSharedPreferences(prefsAccounts, MODE_PRIVATE)
+            .edit { putString(keyAccounts, gson.toJson(accounts)) }
+    }
+
+    private fun removeAccount(account: Account) {
+        val accounts = loadAccounts()
 
         if (accounts.remove(account)) {
-            sharedPref.edit { putString(keyAccounts, gson.toJson(accounts)) }
+            saveAccounts(accounts)
             Toast.makeText(this, getString(R.string.account_removed), Toast.LENGTH_SHORT).show()
 
             // Check if the removed account is the active account.
@@ -311,15 +346,7 @@ class MainActivity : AppCompatActivity() {
 
 
     private fun updateAccountsList() {
-            val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
-            val json = sharedPref.getString(keyAccounts, "[]")
-            val type: Type = object : TypeToken<List<Account>>() {}.type
-            val accounts: List<Account> = try {
-                gson.fromJson(json, type) ?: emptyList()
-            } catch (_: Exception) {
-                emptyList()
-            }
-            accountAdapter.submitList(accounts)
+            accountAdapter.submitList(loadAccounts())
         }
 
         private fun showAddAccountDialog() {
@@ -347,20 +374,13 @@ class MainActivity : AppCompatActivity() {
         }
 
         private fun onAddAccount(username: String, password: String) {
-            val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
-            val json = sharedPref.getString(keyAccounts, "[]")
-            val type: Type = object : TypeToken<MutableList<Account>>() {}.type
-            val accounts: MutableList<Account> = try {
-                gson.fromJson(json, type) ?: mutableListOf()
-            } catch (_: Exception) {
-                mutableListOf()
-            }
+            val accounts = loadAccounts()
             if (accounts.any { it.username == username }) {
                 Toast.makeText(this, getString(R.string.account_exists), Toast.LENGTH_SHORT).show()
                 return
             }
             accounts.add(Account(username, password))
-            sharedPref.edit().putString(keyAccounts, gson.toJson(accounts)).apply()
+            saveAccounts(accounts)
             Toast.makeText(this, getString(R.string.account_added), Toast.LENGTH_SHORT).show()
             updateAccountsList()
             getSharedPreferences(prefsActive, MODE_PRIVATE).edit().apply {
@@ -376,51 +396,152 @@ class MainActivity : AppCompatActivity() {
 
     @SuppressLint("SetTextI18n")
     private fun showAllUsersUsageDialog() {
-        // Get saved accounts from SharedPreferences.
-        val sharedPref = getSharedPreferences(prefsAccounts, MODE_PRIVATE)
-        val json = sharedPref.getString(keyAccounts, "[]")
-        val type: Type = object : TypeToken<List<Account>>() {}.type
-        val accounts: List<Account> = try {
-            gson.fromJson(json, type) ?: emptyList()
-        } catch (_: Exception) {
-            emptyList()
-        }
+        val dialogView = layoutInflater.inflate(R.layout.dialog_all_users_usage, null)
+        val table = dialogView.findViewById<TableLayout>(R.id.usageTable)
+        val emptyText = dialogView.findViewById<TextView>(R.id.usageTableEmpty)
+
+        addTableHeader(table)
 
         lifecycleScope.launch {
-            val usageText: String = if (accounts.isEmpty()) {
-                "No accounts found."
-            } else {
-                // Launch concurrent network calls if needed.
-                val usageResultsDeferred = accounts.mapIndexed { index, account ->
-                    async {
-                        try {
-                            val usageData = loginAndFetchUsageData(account.username, account.password)
-                            // Check if an error message was returned.
-                            if (usageData.message.isNotEmpty()) {
-                                "${index + 1}. ${account.username}: ${usageData.message}"
-                            } else {
-                                "${index + 1}. ${account.username}: ${usageData.used} min used"
+            try {
+                val accounts = loadAccounts()
+                if (accounts.isEmpty()) {
+                    emptyText.visibility = View.VISIBLE
+                    table.visibility = View.GONE
+                } else {
+                    // Fetch every account in parallel, then fill the table.
+                    val usageResultsDeferred = accounts.mapIndexed { index, account ->
+                        async {
+                            try {
+                                val usageData = loginAndFetchUsageData(account.username, account.password)
+                                if (usageData.message.isNotEmpty()) {
+                                    Triple(index, account.username, listOf(usageData.message, "—"))
+                                } else {
+                                    val remaining = (usageData.free - usageData.used).coerceAtLeast(0L)
+                                    Triple(
+                                        index,
+                                        account.username,
+                                        listOf(
+                                            "${formatDuration(usageData.used)} used",
+                                            if (usageData.free > 0L) "${formatDuration(remaining)} left" else "—"
+                                        )
+                                    )
+                                }
+                            } catch (_: Exception) {
+                                Triple(
+                                    index,
+                                    account.username,
+                                    listOf(getString(R.string.error_fetching_usage), "—")
+                                )
                             }
-                        } catch (_: Exception) {
-                            "${index + 1}. ${account.username}: Error fetching usage."
                         }
                     }
+                    val results = usageResultsDeferred.awaitAll().sortedBy { it.first }
+                    for ((index, username, cells) in results) {
+                        addTableRow(table, listOf("${index + 1}", username, cells[0], cells[1]))
+                    }
                 }
-                val usageResults = usageResultsDeferred.awaitAll()
-                usageResults.joinToString(separator = "\n")
+
+                MaterialAlertDialogBuilder(this@MainActivity)
+                    .setTitle(getString(R.string.all_users_usage))
+                    .setView(dialogView)
+                    .setPositiveButton(getString(R.string.ok), null)
+                    .show()
+            } finally {
+                // Always revert the button state, even on failure.
+                showAllUsersUsageButton.text = getString(R.string.show_usage)
+                showAllUsersUsageButton.isEnabled = true
             }
-
-            // After the data is ready, revert the button state.
-            showAllUsersUsageButton.text = "Show All"
-            showAllUsersUsageButton.isEnabled = true
-
-            // Then, show the dialog box.
-            MaterialAlertDialogBuilder(this@MainActivity)
-                .setTitle(getString(R.string.all_users_usage))
-                .setMessage(usageText)
-                .setPositiveButton(getString(R.string.ok), null)
-                .show()
         }
+    }
+
+    private fun addTableHeader(table: TableLayout) {
+        val row = TableRow(this)
+        addTableCell(row, "#", isHeader = true, weight = 0f)
+        addTableCell(row, getString(R.string.username_hint), isHeader = true, weight = 1f)
+        addTableCell(row, getString(R.string.used), isHeader = true, weight = 1f)
+        addTableCell(row, getString(R.string.remaining), isHeader = true, weight = 0f)
+        table.addView(row)
+    }
+
+    private fun addTableRow(table: TableLayout, cells: List<String>) {
+        val row = TableRow(this)
+        cells.forEachIndexed { index, text ->
+            addTableCell(row, text, isHeader = false, weight = if (index == 1 || index == 2) 1f else 0f)
+        }
+        table.addView(row)
+    }
+
+    private fun addTableCell(row: TableRow, text: String, isHeader: Boolean, weight: Float) {
+        val cell = TextView(this).apply {
+            this.text = text
+            setPadding(dp(12), dp(10), dp(12), dp(10))
+            textSize = if (isHeader) 15f else 14f
+            typeface = if (isHeader) Typeface.DEFAULT_BOLD else Typeface.DEFAULT
+            if (isHeader) {
+                setBackgroundColor(resources.getColor(R.color.teal_200, null))
+                setTextColor(Color.BLACK)
+            }
+        }
+        row.addView(
+            cell,
+            TableRow.LayoutParams(
+                if (weight > 0f) 0 else TableRow.LayoutParams.WRAP_CONTENT,
+                TableRow.LayoutParams.WRAP_CONTENT,
+                weight
+            )
+        )
+    }
+
+    private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
+
+    private fun showChangePasswordDialog(account: Account) {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_change_password, null)
+        val dialogUsername = dialogView.findViewById<TextInputEditText>(R.id.dialogUsername)
+        val dialogPassword = dialogView.findViewById<TextInputEditText>(R.id.dialogPassword)
+        dialogUsername.setText(account.username)
+        dialogPassword.setText(account.password)
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.change_password))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.save), null)
+            .setNegativeButton(getString(R.string.cancel), null)
+            .create()
+
+        // Validate before closing so the dialog stays open on empty input.
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val newPassword = dialogPassword.text.toString().trim()
+                if (newPassword.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.enter_password), Toast.LENGTH_SHORT).show()
+                } else {
+                    updateAccountPassword(account, newPassword)
+                    dialog.dismiss()
+                }
+            }
+        }
+        dialog.show()
+    }
+
+    private fun updateAccountPassword(account: Account, newPassword: String) {
+        val accounts = loadAccounts()
+        val index = accounts.indexOfFirst { it.username == account.username }
+        if (index < 0) {
+            Toast.makeText(this, getString(R.string.account_not_found), Toast.LENGTH_SHORT).show()
+            return
+        }
+        accounts[index] = accounts[index].copy(password = newPassword)
+        saveAccounts(accounts)
+
+        // If the edited account is active, keep the active credentials in sync.
+        val activePrefs = getSharedPreferences(prefsActive, MODE_PRIVATE)
+        if (activePrefs.getString("username", "") == account.username) {
+            activePrefs.edit { putString("password", newPassword) }
+        }
+
+        updateAccountsList()
+        Toast.makeText(this, getString(R.string.password_updated), Toast.LENGTH_SHORT).show()
     }
 
 

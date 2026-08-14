@@ -3,6 +3,7 @@ package com.example.iuserusagenotifier
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import android.widget.ImageButton
 import android.widget.TextView
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
@@ -13,7 +14,8 @@ import com.google.android.material.button.MaterialButton
 
 class AccountAdapter(
     private val onAccountSelected: (Account) -> Unit,
-    private val onRemoveClicked: (Account) -> Unit
+    private val onRemoveClicked: (Account) -> Unit,
+    private val onEditClicked: (Account) -> Unit
 ) : ListAdapter<Account, AccountAdapter.AccountViewHolder>(AccountDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): AccountViewHolder {
@@ -31,6 +33,7 @@ class AccountAdapter(
         // Using the updated ID "accountName" from new layout.
         private val accountNameText: TextView = itemView.findViewById(R.id.accountName)
         private val removeButton: MaterialButton = itemView.findViewById(R.id.accountRemoveButton)
+        private val editButton: ImageButton = itemView.findViewById(R.id.accountEditButton)
 
         fun bind(account: Account) {
             accountNameText.text = account.username
@@ -38,6 +41,8 @@ class AccountAdapter(
             itemView.setOnClickListener { onAccountSelected(account) }
             // Callback for when the remove button is tapped.
             removeButton.setOnClickListener { onRemoveClicked(account) }
+            // Callback for when the edit (change password) button is tapped.
+            editButton.setOnClickListener { onEditClicked(account) }
         }
     }
 }

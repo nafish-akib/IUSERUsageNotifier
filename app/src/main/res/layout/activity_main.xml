@@ -25,6 +25,14 @@
                 android:layout_height="match_parent"
                 android:orientation="vertical">
 
+                <!-- Top banner: fills the status-bar / camera-cutout strip so
+                     the header text below is never clipped by the front camera -->
+                <View
+                    android:id="@+id/topBanner"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:background="@color/myPrimary"/>
+
                 <!-- Custom Header (Active Account Section) with fixed height -->
                 <TextView
                     android:id="@+id/activeAccountBar"

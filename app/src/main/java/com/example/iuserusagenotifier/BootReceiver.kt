@@ -16,25 +16,23 @@ class BootReceiver : BroadcastReceiver() {
 
 
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
-            if (isConnectedToUniversityWifi(context)) {
-                val activePrefs = context.getSharedPreferences("IUSER_PREFS", Context.MODE_PRIVATE)
-                val username = activePrefs.getString("username", "")
-                val password = activePrefs.getString("password", "")
-                Log.d("BootReceiver", "Wi-Fi connected. Username: $username")
+            val activePrefs = context.getSharedPreferences("IUSER_PREFS", Context.MODE_PRIVATE)
+            val username = activePrefs.getString("username", "")
+            val password = activePrefs.getString("password", "")
 
-                if (!username.isNullOrEmpty() && !password.isNullOrEmpty()) {
-                    val oneTimeRequest = OneTimeWorkRequestBuilder<UsageCheckWorker>().build()
-                    WorkManager.getInstance(context).enqueue(oneTimeRequest)
-                }
+            // Only run a check if credentials exist and a network is already available.
+            if (!username.isNullOrEmpty() && !password.isNullOrEmpty() && isConnectedToWifi(context)) {
+                Log.d("BootReceiver", "Wi-Fi connected. Username: $username")
+                val oneTimeRequest = OneTimeWorkRequestBuilder<UsageCheckWorker>().build()
+                WorkManager.getInstance(context).enqueue(oneTimeRequest)
             }
         }
     }
 
-    private fun isConnectedToUniversityWifi(context: Context): Boolean {
+    private fun isConnectedToWifi(context: Context): Boolean {
         val cm = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-        val network = cm.activeNetwork
-        val capabilities = cm.getNetworkCapabilities(network)
-
-        return capabilities?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true
+        // At boot the active network may not be reported yet; treat that as "no Wi-Fi".
+        val capabilities = cm.getNetworkCapabilities(cm.activeNetwork) ?: return false
+        return capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)
     }
 }

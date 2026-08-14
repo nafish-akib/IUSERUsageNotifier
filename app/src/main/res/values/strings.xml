@@ -46,6 +46,16 @@
     <string name="ok">OK</string>
     <string name="usage_default_text">Usage: ---</string>
 
+    <!-- Table and password features -->
+    <string name="used">Used</string>
+    <string name="remaining">Remaining</string>
+    <string name="no_accounts_found">No accounts found.</string>
+    <string name="change_password">Change Password</string>
+    <string name="save">Save</string>
+    <string name="password_updated">Password updated</string>
+    <string name="enter_password">Please enter a password</string>
+    <string name="error_fetching_usage">Error fetching usage.</string>
+
 
 
     <!-- This is the array for display in the spinner -->

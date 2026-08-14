@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/accountItemLayout"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -16,6 +17,15 @@
         android:text="Account Name"
         android:textAppearance="?android:attr/textAppearanceMedium"
         android:textColor="?android:textColorPrimary" />
+
+    <ImageButton
+        android:id="@+id/accountEditButton"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:contentDescription="@string/change_password"
+        app:srcCompat="@drawable/ic_edit"
+        app:tint="?attr/colorControlNormal" />
 
     <com.google.android.material.button.MaterialButton
         android:id="@+id/accountRemoveButton"

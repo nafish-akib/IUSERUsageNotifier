@@ -22,10 +22,10 @@
 
         <activity
             android:name=".IUserWebActivity"
-            android:exported="true" />
+            android:exported="false" />
         <activity
             android:name=".SisWebActivity"
-            android:exported="true" />
+            android:exported="false" />
 
         <receiver
             android:enabled="true"

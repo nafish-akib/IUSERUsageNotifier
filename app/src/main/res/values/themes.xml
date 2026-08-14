@@ -25,6 +25,8 @@
 
         <!-- Set status bar color to match primary color so it blends with your custom toolbar -->
         <item name="android:statusBarColor">@color/myPrimary</item>
+        <!-- Let the window draw behind the camera cutout so the top banner can cover it -->
+        <item name="android:windowLayoutInDisplayCutoutMode">shortEdges</item>
         <!-- Specify background and primary text color for layouts -->
         <item name="android:colorBackground">@color/background</item>
         <item name="android:textColorPrimary">@color/onBackground</item>
