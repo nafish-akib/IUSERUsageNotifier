@@ -347,7 +347,8 @@ def main():
         log.warning("Usage fetch failed: %s", error)
     else:
         percent = (used / free * 100) if free > 0 else 0.0
-        log.info("Used: %s / %s (%.1f%%)", format_duration(used), format_duration(free), percent)
+        log.info("Used: %s / %s (%.1f%%, %.1f hours)",
+                 format_duration(used), format_duration(free), percent, used / 3600.0)
 
     if args.check:
         return
@@ -357,18 +358,20 @@ def main():
         return
 
     # Default: rotate when over threshold (or dry-run report).
-    threshold = config.get("threshold_percent", 90)
+    threshold_hours = config.get("threshold_hours", 190.0)
     if error:
         log.info("No rotation: usage could not be fetched.")
         return
-    if free > 0 and used / free * 100 >= threshold:
+    used_hours = used / 3600.0
+    if used_hours >= threshold_hours:
         if args.dry_run:
             target = creds[next_credential(creds, state["active_index"])]
             log.info("[dry-run] Would rotate to %s", target["username"])
         else:
             rotate(config, state)
     else:
-        log.info("Usage below threshold (%.0f%%), no rotation needed.", threshold)
+        log.info("Usage %.1fh below threshold %.1fh, no rotation needed.",
+                 used_hours, threshold_hours)
 
 
 if __name__ == "__main__":

@@ -17,7 +17,7 @@ data class RouterConfig(
     val adminUser: String = "admin",
     val adminPassword: String = "",
     val autoRotate: Boolean = true,
-    val thresholdPercent: Int = 90,
+    val thresholdHours: Double = 191.67,
     val pppoeAccounts: List<Account> = emptyList(),
     val activeIndex: Int = 0
 )

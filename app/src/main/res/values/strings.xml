@@ -63,7 +63,7 @@
     <string name="router_admin_user_hint">Router Admin Username</string>
     <string name="router_admin_password_hint">Router Admin Password</string>
     <string name="auto_rotate_switch">Auto-rotate PPPoE when over limit</string>
-    <string name="threshold_hint">Rotate at usage % of limit</string>
+    <string name="threshold_hint">Rotate when usage reaches (hours)</string>
     <string name="pppoe_accounts_title">PPPoE Accounts (rotate through)</string>
     <string name="pppoe_username_hint">IUSER username</string>
     <string name="pppoe_password_hint">Password</string>

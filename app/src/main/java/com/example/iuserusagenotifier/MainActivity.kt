@@ -641,7 +641,7 @@ class MainActivity : AppCompatActivity() {
         adminUser.setText(routerConfig.adminUser)
         adminPassword.setText(routerConfig.adminPassword)
         autoRotate.isChecked = routerConfig.autoRotate
-        threshold.setText(routerConfig.thresholdPercent.toString())
+        threshold.setText(routerConfig.thresholdHours.toString())
         rotateNowButton.isEnabled = routerConfig.pppoeAccounts.size >= 2
 
         fun rebuildRows() {
@@ -703,7 +703,7 @@ class MainActivity : AppCompatActivity() {
                 val newIp = routerIp.text.toString().trim()
                 val newUser = adminUser.text.toString().trim()
                 val newPass = adminPassword.text.toString().trim()
-                val newThreshold = threshold.text.toString().toIntOrNull() ?: 90
+                val newThreshold = threshold.text.toString().toDoubleOrNull() ?: 191.67
                 if (newIp.isEmpty() || newUser.isEmpty() || newPass.isEmpty()) {
                     Toast.makeText(this, getString(R.string.enter_router_details), Toast.LENGTH_SHORT).show()
                     return@setOnClickListener
@@ -713,7 +713,7 @@ class MainActivity : AppCompatActivity() {
                     adminUser = newUser,
                     adminPassword = newPass,
                     autoRotate = autoRotate.isChecked,
-                    thresholdPercent = newThreshold.coerceIn(1, 100)
+                    thresholdHours = newThreshold.coerceIn(0.5, 720.0)
                 )
                 saveRouterConfig(this, routerConfig)
                 Toast.makeText(this, getString(R.string.router_settings_saved), Toast.LENGTH_SHORT).show()
@@ -732,9 +732,9 @@ class MainActivity : AppCompatActivity() {
     private fun maybeAutoRotate(usedSeconds: Long, freeSeconds: Long) {
         if (!routerConfig.autoRotate) return
         if (routerConfig.pppoeAccounts.size < 2) return
-        if (freeSeconds <= 0L) return
-        val percent = usedSeconds * 100.0 / freeSeconds
-        if (percent >= routerConfig.thresholdPercent) {
+        if (usedSeconds <= 0L) return
+        val usedHours = usedSeconds / 3600.0
+        if (usedHours >= routerConfig.thresholdHours) {
             rotateNow()
         }
     }

@@ -13,7 +13,9 @@ the next one in the saved list.
    - `router.ip` — the router's admin address (TP-Link default: `192.168.0.1`)
    - `router.admin_user` / `router.admin_pass` — router admin login
    - `credentials` — the list of IUSER usernames/passwords to rotate through
-   - `threshold_percent` — rotate when usage reaches this % of the free limit
+   - `threshold_hours` — rotate when the active credential's usage reaches this
+     many hours (IUT free limit is 200 hrs per cycle, so e.g. `191.67` = 11500
+     minutes, about 96% of the free quota)
    - `cooldown_hours` — minimum hours between rotations (prevents double-swaps)
 4. Test:
    - `python usage_monitor.py --check` — fetch and print usage only

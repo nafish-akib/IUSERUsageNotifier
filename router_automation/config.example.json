@@ -25,6 +25,6 @@
             "password": "your_iuser_password_4"
         }
     ],
-    "threshold_percent": 90,
+    "threshold_hours": 191.67,
     "cooldown_hours": 12
 }
