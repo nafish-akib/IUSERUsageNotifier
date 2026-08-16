@@ -3,23 +3,41 @@ package com.example.iuserusagenotifier
 import android.util.Base64
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import okhttp3.Cookie
-import okhttp3.CookieJar
-import okhttp3.FormBody
-import okhttp3.HttpUrl
+import okhttp3.MediaType
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import org.jsoup.Jsoup
+import okhttp3.RequestBody
+import okhttp3.RequestBody.Companion.toRequestBody
 import java.util.concurrent.TimeUnit
 
 /**
- * Driver for the classic TP-Link web UI (login.html + wancfg.cmd), the
- * generation used by TL-WR840N / TL-WR841N / TL-WR940N and similar routers
- * common in IUT student rooms.
+ * Driver for the TP-Link CGI interface (TL-WR845N and similar classic models).
+ *
+ * Reverse-engineered against a live TL-WR845N admin panel. The protocol:
+ *   1. Auth is a plain cookie: `Authorization=Basic base64(user:pass)` — no POST login.
+ *   2. All reads/writes are POSTs to `/cgi?<action>&_=<timestamp>` with a
+ *      text/plain body of `[OID#stack#0,0,0,0,0,0]index,count\r\n` followed by
+ *      `key=value\r\n` lines (a trailing CRLF is required).
+ *   3. Actions: 1 = GET, 2 = SET, 5 = GL (list).
+ *   4. Discovery: GL `WAN_COMMON_INTF_CFG` -> find WANAccessType=Ethernet stack,
+ *      then GL `WAN_PPP_CONN` -> find the enabled PPPoE instance.
+ *   5. SET `WAN_PPP_CONN` with enable/username/password + passthrough fields.
+ *      Response `[error]71014` means success.
  *
  * Returns an empty string on success, or a human-readable error message.
  */
 object TPLinkRouter {
+
+    private const val ACTION_GET = 1
+    private const val ACTION_SET = 2
+    private const val ACTION_GL = 5
+    private const val STACK_NULL = "0,0,0,0,0,0"
+    private const val OID_COMMON_INTF = "WAN_COMMON_INTF_CFG"
+    private const val OID_PPP_CONN = "WAN_PPP_CONN"
+    private const val JSON = "text/plain; charset=utf-8"
+
+    private class Instance(val stack: String, val fields: MutableMap<String, String> = mutableMapOf())
 
     suspend fun loginAndSetPppoe(
         ip: String,
@@ -28,114 +46,109 @@ object TPLinkRouter {
         newPppoeUser: String,
         newPppoePassword: String
     ): String = withContext(Dispatchers.IO) {
-        val base = "http://$ip"
-        val cookieStore = mutableMapOf<String, List<Cookie>>()
         val client = OkHttpClient.Builder()
-            .cookieJar(object : CookieJar {
-                override fun saveFromResponse(url: HttpUrl, cookies: List<Cookie>) {
-                    cookieStore[url.host] = cookies
-                }
-
-                override fun loadForRequest(url: HttpUrl): List<Cookie> =
-                    cookieStore[url.host] ?: emptyList()
-            })
             .connectTimeout(10, TimeUnit.SECONDS)
             .readTimeout(15, TimeUnit.SECONDS)
             .build()
+        val auth = "Basic " + Base64.encodeToString(
+            "$adminUser:$adminPassword".toByteArray(),
+            Base64.NO_WRAP
+        )
 
         try {
-            // 1) Log in. Classic TP-Link expects the password base64-encoded.
-            val encodedPassword =
-                Base64.encodeToString(adminPassword.toByteArray(), Base64.NO_WRAP)
-            var loggedIn = false
-            for (path in listOf("/login.html", "/login.htm")) {
-                val loginForm = FormBody.Builder()
-                    .add("userName", adminUser)
-                    .add("pcPassword", encodedPassword)
-                    .build()
-                client.newCall(
-                    Request.Builder()
-                        .url(base + path)
-                        .post(loginForm)
-                        .header("Referer", "$base/")
-                        .build()
-                ).execute().use { }
-                loggedIn = cookieStore.values.flatten().any {
-                    it.name.equals("Authorization", ignoreCase = true)
-                }
-                if (loggedIn) break
-            }
-            if (!loggedIn) return@withContext "Router login failed"
+            // 1) Find the Ethernet WAN interface stack.
+            val intfList = cgi(client, ip, auth, ACTION_GL, OID_COMMON_INTF, STACK_NULL, listOf("WANAccessType"))
+            val ethStack = intfList.firstOrNull { it.fields["WANAccessType"] == "Ethernet" }?.stack
+                ?: return@withContext "Ethernet WAN interface not found"
 
-            // 2) Open the WAN config page and collect every form field.
-            val wanResponse = client.newCall(
-                Request.Builder()
-                    .url("$base/wancfg.cmd")
-                    .get()
-                    .header("Referer", "$base/")
-                    .build()
-            ).execute()
-            try {
-                if (!wanResponse.isSuccessful) {
-                    return@withContext "Failed to open WAN config (HTTP ${wanResponse.code})"
-                }
-                val doc = Jsoup.parse(wanResponse.body?.string().orEmpty())
-                val fields = mutableMapOf<String, String>()
-                for (input in doc.select("input")) {
-                    val name = input.attr("name")
-                    if (name.isNotEmpty()) fields[name] = input.attr("value")
-                }
-                for (select in doc.select("select")) {
-                    val name = select.attr("name")
-                    if (name.isNotEmpty()) {
-                        fields[name] = select.select("option[selected]").firstOrNull()
-                            ?.attr("value")
-                            ?: select.attr("value")
-                    }
-                }
-                val formAction = doc.select("form").firstOrNull { it.id() == "form0" }
-                    ?: doc.select("form").firstOrNull()
-                val action = formAction?.attr("action")?.ifEmpty { "/wancfg.cmd" } ?: "/wancfg.cmd"
-                val actionUrl = if (action.startsWith("http")) action else base + action
+            // 2) Find the enabled PPPoE connection stack.
+            val pppList = cgi(client, ip, auth, ACTION_GL, OID_PPP_CONN, STACK_NULL, listOf("enable"))
+            val pppStack = pppList.firstOrNull { it.fields["enable"] == "1" }?.stack
+                ?: pppList.firstOrNull()?.stack
+                ?: return@withContext "PPPoE connection not found"
 
-                if (!fields.containsKey("wan_ppp_username")) {
-                    return@withContext "PPPoE form not found (unsupported router UI?)"
-                }
+            // 3) Read the current config to preserve passthrough fields.
+            val current = cgi(client, ip, auth, ACTION_GET, OID_PPP_CONN, pppStack)
+                .firstOrNull()
+            val secondConn = current?.fields?.get("secondConnection") ?: "sec_conn_disable"
+            val trigger = current?.fields?.get("connectionTrigger") ?: "AlwaysOn"
 
-                // 3) Swap the credentials and submit the whole form.
-                fields["wan_ppp_username"] = newPppoeUser
-                fields["wan_ppp_password"] = newPppoePassword
-                fields["wan_ppp_confirm"] = newPppoePassword
-
-                val body = FormBody.Builder().apply {
-                    for ((name, value) in fields) add(name, value)
-                }.build()
-
-                val saveResponse = client.newCall(
-                    Request.Builder()
-                        .url(actionUrl)
-                        .post(body)
-                        .header("Referer", "$base/wancfg.cmd")
-                        .build()
-                ).execute()
-                try {
-                    if (!saveResponse.isSuccessful) {
-                        return@withContext "Router returned HTTP ${saveResponse.code}"
-                    }
-                    val text = saveResponse.body?.string().orEmpty().lowercase()
-                    if ("success" in text || "ok" in text || "result" in text) {
-                        ""
-                    } else {
-                        "Router did not confirm the change"
-                    }
-                } finally {
-                    saveResponse.close()
-                }
-            } finally {
-                wanResponse.close()
+            // 4) Apply the new credentials.
+            val attrs = listOf(
+                "enable=1",
+                "username=$newPppoeUser",
+                "password=$newPppoePassword",
+                "secondConnection=$secondConn",
+                "connectionTrigger=$trigger"
+            )
+            val result = cgi(client, ip, auth, ACTION_SET, OID_PPP_CONN, pppStack, attrs)
+            if (result.isEmpty()) {
+                "PPPoE credentials switched (verify on the router status page)"
+            } else {
+                "Router error: ${result[0].fields["error"] ?: "unknown"}"
             }
         } catch (e: Exception) {
             "❌ ${e.localizedMessage ?: "Unexpected error"}"
         }
+    }
+
+    /**
+     * Runs one CGI action. [attrs] may be plain names (for GL) or `key=value`
+     * lines (for GET/SET attribute requests). Returns parsed instances, or an
+     * instance holding "error" if the router reported a failure.
+     */
+    private fun cgi(
+        client: OkHttpClient,
+        ip: String,
+        auth: String,
+        action: Int,
+        oid: String,
+        stack: String,
+        attrs: List<String> = emptyList()
+    ): List<Instance> {
+        val bodyText = buildString {
+            append("[$oid#$stack#$STACK_NULL]0,${attrs.size}\r\n")
+            if (attrs.isNotEmpty()) {
+                append(attrs.joinToString("\r\n"))
+                append("\r\n")
+            }
+        }
+        val request = Request.Builder()
+            .url("http://$ip/cgi?$action&_=${System.currentTimeMillis()}")
+            .post(bodyText.toRequestBody(JSON.toMediaType()))
+            .header("Cookie", "Authorization=$auth")
+            .header("Content-Type", "text/plain; charset=utf-8")
+            .header("X-Requested-With", "XMLHttpRequest")
+            .header("Referer", "http://$ip/mainFrame.htm")
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                return listOf(Instance("", mutableMapOf("error" to "HTTP ${response.code}")))
+            }
+            return parseCgiResponse(response.body?.string().orEmpty())
+        }
+    }
+
+    private fun parseCgiResponse(text: String): List<Instance> {
+        val instances = mutableListOf<Instance>()
+        var current: Instance? = null
+        for (line in text.split("\n")) {
+            val trimmed = line.trimEnd('\r')
+            if (trimmed.isEmpty()) continue
+            if (trimmed.startsWith("[")) {
+                val end = trimmed.indexOf(']')
+                val stack = trimmed.substring(1, if (end > 0) end else trimmed.length)
+                if (stack == "error") break // [error]71014 = end/success marker
+                current = Instance(stack)
+                instances.add(current)
+            } else {
+                val eq = trimmed.indexOf('=')
+                if (eq > 0 && current != null) {
+                    current.fields[trimmed.substring(0, eq)] = trimmed.substring(eq + 1)
+                }
+            }
+        }
+        return instances
     }
 }

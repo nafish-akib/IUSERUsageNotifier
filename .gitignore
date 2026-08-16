@@ -17,3 +17,10 @@ keystore.properties
 *.jks
 *.keystore
 /app/release
+
+# Python runtime artifacts
+router_automation/__pycache__/
+router_automation/monitor.log
+router_automation/state.json
+router_automation/config.json
+router_automation/config.backup.json

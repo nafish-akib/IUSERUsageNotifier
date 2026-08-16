@@ -149,86 +149,132 @@ def format_duration(total_seconds):
 
 
 # ---------------------------------------------------------------------------
-# TP-Link classic web UI driver (login.html + wancfg.cmd)
+# TP-Link CGI driver (TL-WR845N and similar classic models)
 #
-# Covers the classic TP-Link generation (TL-WR840N, TL-WR841N, TL-WR940N,
-# TL-WR842ND and similar) that is common in IUT student rooms.
-# If your router uses the newer tplogin.cn / LuCI interface, implement another
-# driver class below and pick it in `rotator_for()`.
+# Reverse-engineered against a live TL-WR845N admin panel:
+#   1. Auth is a plain cookie `Authorization=Basic base64(user:pass)` (no POST).
+#   2. Reads/writes are POSTs to /cgi?<action>&_=<timestamp> with a text/plain
+#      body of `[OID#stack#0,0,0,0,0,0]index,count\r\n` + `key=value\r\n` lines
+#      (trailing CRLF required). Actions: 1=GET, 2=SET, 5=GL (list).
+#   3. GL WAN_COMMON_INTF_CFG -> Ethernet stack, GL WAN_PPP_CONN -> enabled
+#      PPPoE stack, GET its config, SET new credentials.
+#   4. `[error]71014` in the response means success.
 # ---------------------------------------------------------------------------
 
-class TPLinkClassic:
+ACT_GET = 1
+ACT_SET = 2
+ACT_GL = 5
+STACK_NULL = "0,0,0,0,0,0"
+
+
+class TPLinkCgi:
     def __init__(self, base_url, admin_user, admin_password):
         self.base = base_url.rstrip("/")
-        self.admin_user = admin_user
-        self.admin_password = admin_password
+        self.auth = "Basic " + base64.b64encode(
+            f"{admin_user}:{admin_password}".encode()
+        ).decode()
         self.session = requests.Session()
 
-    def login(self):
-        # Old-gen TP-Link stores the password base64-encoded in the form.
-        payload = base64.b64encode(self.admin_password.encode()).decode()
-        for path in ("/login.html", "/login.htm"):
-            try:
-                r = self.session.post(
-                    f"{self.base}{path}",
-                    data={"userName": self.admin_user, "pcPassword": payload},
-                    headers={"Referer": f"{self.base}/"},
-                    timeout=10,
-                )
-                if r.ok and "Authorization" in self.session.cookies:
-                    log.info("Router login OK (%s)", path)
-                    return True
-            except requests.RequestException:
-                continue
-        return False
-
-    def _wancfg_fields(self):
-        r = self.session.get(f"{self.base}/wancfg.cmd", timeout=10)
+    def _cgi(self, action, oid, stack, attrs):
+        """attrs: list of 'name' or 'key=value' strings. Returns list of dicts."""
+        body = f"[{oid}#{stack}#{STACK_NULL}]0,{len(attrs)}\r\n"
+        if attrs:
+            body += "\r\n".join(attrs) + "\r\n"
+        ts = int(datetime.now().timestamp() * 1000)
+        r = self.session.post(
+            f"{self.base}/cgi?{action}&_={ts}",
+            data=body.encode(),
+            headers={
+                "Cookie": f"Authorization={self.auth}",
+                "Content-Type": "text/plain; charset=utf-8",
+                "X-Requested-With": "XMLHttpRequest",
+                "Referer": f"{self.base}/mainFrame.htm",
+            },
+            timeout=10,
+        )
         r.raise_for_status()
-        soup = BeautifulSoup(r.text, "html.parser")
-        fields = {}
-        form_action = "/wancfg.cmd"
-        form = soup.find("form", id="form0") or soup.find("form")
-        if form and form.get("action"):
-            form_action = form["action"]
-        for inp in soup.find_all("input"):
-            name = inp.get("name")
-            if name:
-                fields[name] = inp.get("value", "")
-        for sel in soup.find_all("select"):
-            name = sel.get("name")
-            if not name:
+        return self._parse(r.text)
+
+    @staticmethod
+    def _parse(text):
+        instances = []
+        current = None
+        for raw in text.split("\n"):
+            line = raw.rstrip("\r")
+            if not line:
                 continue
-            selected = sel.find("option", selected=True)
-            fields[name] = selected.get("value") if selected else (sel.get("value") or "")
-        return form_action, fields
+            if line.startswith("["):
+                end = line.find("]")
+                stack = line[1:end] if end > 0 else line[1:]
+                if stack == "error":  # [error]71014 = end/success marker
+                    break
+                current = {"__stack": stack}
+                instances.append(current)
+            else:
+                if "=" in line and current is not None:
+                    key, value = line.split("=", 1)
+                    current[key] = value
+        return instances
+
+    def login(self):
+        try:
+            intf = self._cgi(ACT_GL, "WAN_COMMON_INTF_CFG", STACK_NULL, ["WANAccessType"])
+            ok = any(i.get("WANAccessType") == "Ethernet" for i in intf)
+            if not ok:
+                log.error("Router login failed: no Ethernet WAN interface found "
+                          "(check ip/admin credentials in config.json)")
+                return False
+            log.info("Router login OK")
+            return True
+        except requests.RequestException as e:
+            log.error("Router login failed: %s", e)
+            return False
 
     def set_pppoe(self, new_username, new_password):
-        form_action, fields = self._wancfg_fields()
-        if "wan_ppp_username" not in fields:
-            return "PPPoE form not found (router may use a different UI generation)"
-        fields["wan_ppp_username"] = new_username
-        fields["wan_ppp_password"] = new_password
-        fields["wan_ppp_confirm"] = new_password
-        url = self.base + form_action if form_action.startswith("/") else self.base + "/" + form_action
-        r = self.session.post(
-            url,
-            data=fields,
-            headers={"Referer": f"{self.base}/wancfg.cmd"},
-            timeout=15,
-        )
-        if not r.ok:
-            return f"Router returned HTTP {r.status_code}"
-        # TP-Link classic answers with "success" / "ok" in the body on success.
-        body = r.text.lower()
-        if "success" in body or "ok" in body or "result" in body:
+        try:
+            intf = self._cgi(ACT_GL, "WAN_COMMON_INTF_CFG", STACK_NULL, ["WANAccessType"])
+            eth_stack = next(
+                (i["__stack"] for i in intf if i.get("WANAccessType") == "Ethernet"),
+                None,
+            )
+            if not eth_stack:
+                return "Ethernet WAN interface not found"
+
+            ppp = self._cgi(ACT_GL, "WAN_PPP_CONN", STACK_NULL, ["enable"])
+            ppp_stack = next(
+                (i["__stack"] for i in ppp if i.get("enable") == "1"),
+                ppp[0]["__stack"] if ppp else None,
+            )
+            if not ppp_stack:
+                return "PPPoE connection not found"
+
+            current = self._cgi(ACT_GET, "WAN_PPP_CONN", ppp_stack, [])
+            current = current[0] if current else {}
+            second_conn = current.get("secondConnection", "sec_conn_disable")
+            trigger = current.get("connectionTrigger", "AlwaysOn")
+
+            result = self._cgi(
+                ACT_SET,
+                "WAN_PPP_CONN",
+                ppp_stack,
+                [
+                    "enable=1",
+                    f"username={new_username}",
+                    f"password={new_password}",
+                    f"secondConnection={second_conn}",
+                    f"connectionTrigger={trigger}",
+                ],
+            )
+            if result:
+                return "Router did not confirm the change"
             return ""
-        return "Router did not confirm the change"
+        except requests.RequestException as e:
+            return f"Router request failed: {e}"
 
 
 def rotator_for(config):
     base = f"http://{config['router']['ip']}"
-    return TPLinkClassic(base, config["router"]["admin_user"], config["router"]["admin_pass"])
+    return TPLinkCgi(base, config["router"]["admin_user"], config["router"]["admin_pass"])
 
 
 # ---------------------------------------------------------------------------

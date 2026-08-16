@@ -27,15 +27,23 @@ rotation time) lives in `state.json`.
 
 ## Supported router
 
-The built-in driver targets the **classic TP-Link web UI** (login.html +
-wancfg.cmd) used by the TL-WR840N / TL-WR841N / TL-WR940N / TL-WR842ND family
-that is common in student rooms. The script logs in with the admin account,
-opens the WAN config page, rewrites the PPPoE username/password, and submits
-the form — exactly what you do manually, but automated.
+The driver talks to the **TP-Link CGI interface** used by the TL-WR845N (and
+the classic WR840N/WR841N/WR940N family). It was reverse-engineered and
+**verified live against the actual room router**:
 
-If your router uses the newer tplogin.cn / LuCI interface, add a driver class
-next to `TPLinkClassic` (implement `login()` and `set_pppoe()`) and select it
-in `rotator_for()`.
+1. Auth is a plain cookie — `Authorization=Basic base64(user:pass)` — no form login.
+2. All reads/writes are `POST /cgi?<action>&_=<timestamp>` with a
+   `text/plain` body: `[OID#stack#0,0,0,0,0,0]index,count\r\n` followed by
+   `key=value\r\n` lines (a trailing CRLF is required). Actions: 1=GET,
+   2=SET, 5=GL (list). The router answers with `[error]71014` on success.
+3. The script discovers the Ethernet WAN stack via `WAN_COMMON_INTF_CFG`,
+   finds the enabled PPPoE connection in `WAN_PPP_CONN`, reads its current
+   `secondConnection`/`connectionTrigger`, then SETs `enable=1` plus the new
+   `username`/`password`.
+
+If your router is a different generation (newer tplogin.cn / LuCI UI), add a
+driver class next to `TPLinkCgi` (implement `login()` and `set_pppoe()`) and
+select it in `rotator_for()`.
 
 > Note: the PPPoE change briefly drops the internet (the WAN reconnects with
 > the new credentials). The router itself does not reboot.
