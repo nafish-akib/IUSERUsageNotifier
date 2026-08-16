@@ -8,6 +8,7 @@ import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
 import android.net.ConnectivityManager
+import android.net.Network
 import android.net.NetworkCapabilities
 import android.os.Build
 import android.os.Bundle
@@ -77,6 +78,10 @@ class MainActivity : AppCompatActivity() {
     // Notification interval value in hours.
     private var notificationIntervalHours: Long = 1
 
+    // True while the indicator is showing the "waiting for IUT Wi-Fi" state.
+    private var waitingForWifi = false
+    private var networkCallback: ConnectivityManager.NetworkCallback? = null
+
     // Gson instance for handling JSON.
     private val gson = Gson()
 
@@ -139,6 +144,7 @@ class MainActivity : AppCompatActivity() {
         updateAccountsList()
         setupButtonListeners()
         setupNotificationIntervalSpinner()
+        registerNetworkCallback()
 
         swipeRefreshLayout.setColorSchemeResources(
             R.color.teal_200,
@@ -261,6 +267,36 @@ class MainActivity : AppCompatActivity() {
 
 
 
+    private fun registerNetworkCallback() {
+        if (networkCallback != null) return
+        val cm = getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+        networkCallback = object : ConnectivityManager.NetworkCallback() {
+            override fun onAvailable(network: Network) = checkForIUTWifiAndFetch()
+            override fun onCapabilitiesChanged(network: Network, networkCapabilities: NetworkCapabilities) =
+                checkForIUTWifiAndFetch()
+        }
+        cm.registerDefaultNetworkCallback(networkCallback!!)
+    }
+
+    /**
+     * When the app is stuck in the "waiting for IUT Wi-Fi" state and the
+     * IUT network just became available, fetch and show the usage automatically.
+     */
+    private fun checkForIUTWifiAndFetch() {
+        if (!waitingForWifi || !credentialsExist()) return
+        if (!isConnectedToIUTWifi()) return
+        runOnUiThread { onCheckUsage() }
+    }
+
+    override fun onDestroy() {
+        networkCallback?.let {
+            (getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager)
+                .unregisterNetworkCallback(it)
+        }
+        networkCallback = null
+        super.onDestroy()
+    }
+
     private fun onCheckUsage(onComplete: (() -> Unit)? = null) {
         val activePrefs = getSharedPreferences(prefsActive, MODE_PRIVATE)
         val username = activePrefs.getString("username", "") ?: ""
@@ -278,10 +314,12 @@ class MainActivity : AppCompatActivity() {
         // The IUSER portal is only reachable on the IUT campus Wi-Fi.
         if (!isConnectedToIUTWifi()) {
             // Show an animated "waiting for IUT Wi-Fi" state instead of a raw network error.
+            waitingForWifi = true
             usageIndicatorView.showIndeterminate(getString(R.string.connect_to_iut_wifi))
             onComplete?.invoke()
             return
         }
+        waitingForWifi = false
 
         // Show "Fetching..." initially.
         usageIndicatorView.updateMessage("Fetching...")
@@ -302,6 +340,7 @@ class MainActivity : AppCompatActivity() {
                 }
             } catch (_: Exception) {
                 // Network dropped mid-fetch: fall back to the friendly Wi-Fi prompt.
+                waitingForWifi = true
                 usageIndicatorView.showIndeterminate(getString(R.string.connect_to_iut_wifi))
             }
             updateActiveAccountDisplay()
@@ -317,7 +356,11 @@ class MainActivity : AppCompatActivity() {
         if (!capabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) return false
         // minSdk 30, so getTransportInfo() (API 29+) is always available.
         val wifiInfo = capabilities.transportInfo as? android.net.wifi.WifiInfo ?: return false
-        val ssid = wifiInfo.ssid?.trim('"')?.trim() ?: return false
+        val ssid = wifiInfo.ssid?.trim('"')?.trim()
+        // On Android 12+ the SSID may be hidden without location permission.
+        // Assume it could be the campus network and let the fetch decide —
+        // a failed fetch falls back to the friendly Wi-Fi prompt anyway.
+        if (ssid.isNullOrEmpty() || ssid.equals("<unknown ssid>", ignoreCase = true)) return true
         return ssid.contains("IUT", ignoreCase = true)
     }
 
