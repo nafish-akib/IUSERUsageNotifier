@@ -273,8 +273,14 @@ class TPLinkCgi:
 
 
 def rotator_for(config):
-    base = f"http://{config['router']['ip']}"
-    return TPLinkCgi(base, config["router"]["admin_user"], config["router"]["admin_pass"])
+    router_cfg = config["router"]
+    rtype = router_cfg.get("type", "cgi")
+    if rtype == "deco":
+        from tplink_deco import TPLinkDeco
+        return TPLinkDeco(router_cfg["ip"], router_cfg["tplink_id"],
+                          router_cfg["tplink_id_pass"])
+    return TPLinkCgi(f"http://{router_cfg['ip']}", router_cfg["admin_user"],
+                     router_cfg["admin_pass"])
 
 
 # ---------------------------------------------------------------------------

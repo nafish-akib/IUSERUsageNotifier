@@ -3,9 +3,12 @@
         "base_url": "http://10.220.20.12"
     },
     "router": {
+        "type": "cgi",
         "ip": "192.168.0.1",
         "admin_user": "admin",
-        "admin_pass": "admin"
+        "admin_pass": "admin",
+        "tplink_id": "your_tplink_cloud_email",
+        "tplink_id_pass": "your_tplink_cloud_password"
     },
     "credentials": [
         {

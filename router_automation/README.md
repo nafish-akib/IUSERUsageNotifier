@@ -11,7 +11,10 @@ the next one in the saved list.
 2. `pip install -r requirements.txt`
 3. `Copy-Item config.example.json config.json` and fill in:
    - `router.ip` — the router's admin address (TP-Link default: `192.168.0.1`)
-   - `router.admin_user` / `router.admin_pass` — router admin login
+   - `router.type` — `"cgi"` (classic routers, default) or `"deco"` (Deco mesh)
+   - `router.admin_user` / `router.admin_pass` — router admin login (CGI only)
+   - `router.tplink_id` / `router.tplink_id_pass` — TP-Link ID e-mail and
+     password used by the Deco app (Deco only)
    - `credentials` — the list of IUSER usernames/passwords to rotate through
    - `threshold_hours` — rotate when the active credential's usage reaches this
      many hours (IUT free limit is 200 hrs per cycle, so e.g. `191.67` = 11500
@@ -46,6 +49,24 @@ the classic WR840N/WR841N/WR940N family). It was reverse-engineered and
 If your router is a different generation (newer tplogin.cn / LuCI UI), add a
 driver class next to `TPLinkCgi` (implement `login()` and `set_pppoe()`) and
 select it in `rotator_for()`.
+
+### Deco routers (TPM5 firmware)
+
+Set `router.type` to `"deco"` and put the TP-Link ID e-mail/password in
+`tplink_id`/`tplink_id_pass`. The `TPLinkDeco` driver was written from a full
+reverse-engineering of the Deco app (v3.10.489): it connects over **SSH on
+port 22** (plaintext password auth, username = TP-Link ID), tunnels a
+**TMP** channel to `127.0.0.1:20002` on the router, opens a session
+(allocToken/verifyToken), then does `IPV4_GET` (opcode 16388) and
+`IPV4_SET` (opcode 16389) with the PPPoE credentials base64-encoded inside
+`wan.user_info`.
+
+> **Caveat:** `TPLinkDeco` has **not been tested against a real Deco router
+> yet** — it is implemented purely from the decompiled app. The first run
+> should be a manual `python usage_monitor.py --rotate` on the actual Deco
+> network to confirm the login and the credential swap before relying on the
+> scheduled task. Requires `pip install paramiko` (added to
+> `requirements.txt`).
 
 > Note: the PPPoE change briefly drops the internet (the WAN reconnects with
 > the new credentials). The router itself does not reboot.
