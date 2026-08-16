@@ -24,3 +24,7 @@ router_automation/monitor.log
 router_automation/state.json
 router_automation/config.json
 router_automation/config.backup.json
+
+# TP-Link Tether analysis artifact
+com.tplink.tether_*.xapk
+com.tplink.tpm5_*.xapk
