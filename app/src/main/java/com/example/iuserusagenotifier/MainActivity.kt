@@ -18,7 +18,9 @@ import android.widget.AdapterView
 import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.ImageView
+import android.widget.LinearLayout
 import android.widget.Spinner
+import android.widget.Switch
 import android.widget.TableLayout
 import android.widget.TableRow
 import android.widget.TextView
@@ -82,6 +84,10 @@ class MainActivity : AppCompatActivity() {
     private var waitingForWifi = false
     private var networkCallback: ConnectivityManager.NetworkCallback? = null
 
+    // Router / PPPoE rotation state.
+    private var routerConfig: RouterConfig = RouterConfig()
+    private var isRotating = false
+
     // Gson instance for handling JSON.
     private val gson = Gson()
 
@@ -109,6 +115,10 @@ class MainActivity : AppCompatActivity() {
         }
         findViewById<Button>(R.id.btnSISWebview).setOnClickListener {
             startActivity(Intent(this, SisWebActivity::class.java))
+            drawerLayout.closeDrawer(GravityCompat.END)
+        }
+        findViewById<Button>(R.id.btnRouterSettings).setOnClickListener {
+            showRouterSettingsDialog()
             drawerLayout.closeDrawer(GravityCompat.END)
         }
 
@@ -144,6 +154,7 @@ class MainActivity : AppCompatActivity() {
         updateAccountsList()
         setupButtonListeners()
         setupNotificationIntervalSpinner()
+        routerConfig = loadRouterConfig(this)
         registerNetworkCallback()
 
         swipeRefreshLayout.setColorSchemeResources(
@@ -335,6 +346,8 @@ class MainActivity : AppCompatActivity() {
                         (usageData.used / 60L).toFloat(),
                         maxMinutes.toFloat()
                     )
+                    // Auto-rotate the router PPPoE credentials when over the limit.
+                    maybeAutoRotate(usageData.used, usageData.free)
                 } else {
                     usageIndicatorView.showErrorMessage(usageData.message)
                 }
@@ -607,6 +620,162 @@ class MainActivity : AppCompatActivity() {
 
         updateAccountsList()
         Toast.makeText(this, getString(R.string.password_updated), Toast.LENGTH_SHORT).show()
+    }
+
+    // --- Router / PPPoE rotation ---
+
+    @SuppressLint("SetTextI18n")
+    private fun showRouterSettingsDialog() {
+        val dialogView = layoutInflater.inflate(R.layout.dialog_router_settings, null)
+        val routerIp = dialogView.findViewById<TextInputEditText>(R.id.routerIp)
+        val adminUser = dialogView.findViewById<TextInputEditText>(R.id.routerAdminUser)
+        val adminPassword = dialogView.findViewById<TextInputEditText>(R.id.routerAdminPassword)
+        val autoRotate = dialogView.findViewById<Switch>(R.id.autoRotateSwitch)
+        val threshold = dialogView.findViewById<TextInputEditText>(R.id.thresholdInput)
+        val pppoeContainer = dialogView.findViewById<LinearLayout>(R.id.pppoeContainer)
+        val pppoeUser = dialogView.findViewById<TextInputEditText>(R.id.pppoeUserInput)
+        val pppoePass = dialogView.findViewById<TextInputEditText>(R.id.pppoePassInput)
+        val rotateNowButton = dialogView.findViewById<MaterialButton>(R.id.rotateNowButton)
+
+        routerIp.setText(routerConfig.ip)
+        adminUser.setText(routerConfig.adminUser)
+        adminPassword.setText(routerConfig.adminPassword)
+        autoRotate.isChecked = routerConfig.autoRotate
+        threshold.setText(routerConfig.thresholdPercent.toString())
+        rotateNowButton.isEnabled = routerConfig.pppoeAccounts.size >= 2
+
+        fun rebuildRows() {
+            pppoeContainer.removeAllViews()
+            routerConfig.pppoeAccounts.forEachIndexed { index, account ->
+                val row = LinearLayout(this).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = android.view.Gravity.CENTER_VERTICAL
+                    setPadding(0, dp(4), 0, dp(4))
+                }
+                row.addView(
+                    TextView(this).apply {
+                        text = if (index == routerConfig.activeIndex)
+                            "${index + 1}. ${account.username} (active)"
+                        else "${index + 1}. ${account.username}"
+                        layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
+                    }
+                )
+                row.addView(
+                    MaterialButton(this, null, com.google.android.material.R.attr.borderlessButtonStyle).apply {
+                        text = getString(R.string.pppoe_removed).substringBefore(" account")
+                        setOnClickListener {
+                            val newList = routerConfig.pppoeAccounts.filterNot { it == account }
+                            routerConfig = routerConfig.copy(pppoeAccounts = newList)
+                            rebuildRows()
+                            rotateNowButton.isEnabled = routerConfig.pppoeAccounts.size >= 2
+                        }
+                    }
+                )
+                pppoeContainer.addView(row)
+            }
+        }
+        rebuildRows()
+
+        dialogView.findViewById<MaterialButton>(R.id.pppoeAddButton).setOnClickListener {
+            val user = pppoeUser.text.toString().trim()
+            val pass = pppoePass.text.toString().trim()
+            if (user.isEmpty() || pass.isEmpty()) {
+                Toast.makeText(this, getString(R.string.pppoe_enter_both), Toast.LENGTH_SHORT).show()
+                return@setOnClickListener
+            }
+            routerConfig = routerConfig.copy(pppoeAccounts = routerConfig.pppoeAccounts + Account(user, pass))
+            pppoeUser.text?.clear()
+            pppoePass.text?.clear()
+            rebuildRows()
+            rotateNowButton.isEnabled = routerConfig.pppoeAccounts.size >= 2
+            Toast.makeText(this, getString(R.string.pppoe_added), Toast.LENGTH_SHORT).show()
+        }
+
+        val dialog = MaterialAlertDialogBuilder(this)
+            .setTitle(getString(R.string.router_settings))
+            .setView(dialogView)
+            .setPositiveButton(getString(R.string.save), null)
+            .setNegativeButton(getString(R.string.cancel), null)
+            .create()
+
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val newIp = routerIp.text.toString().trim()
+                val newUser = adminUser.text.toString().trim()
+                val newPass = adminPassword.text.toString().trim()
+                val newThreshold = threshold.text.toString().toIntOrNull() ?: 90
+                if (newIp.isEmpty() || newUser.isEmpty() || newPass.isEmpty()) {
+                    Toast.makeText(this, getString(R.string.enter_router_details), Toast.LENGTH_SHORT).show()
+                    return@setOnClickListener
+                }
+                routerConfig = routerConfig.copy(
+                    ip = newIp,
+                    adminUser = newUser,
+                    adminPassword = newPass,
+                    autoRotate = autoRotate.isChecked,
+                    thresholdPercent = newThreshold.coerceIn(1, 100)
+                )
+                saveRouterConfig(this, routerConfig)
+                Toast.makeText(this, getString(R.string.router_settings_saved), Toast.LENGTH_SHORT).show()
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+
+        rotateNowButton.setOnClickListener {
+            dialog.dismiss()
+            rotateNow()
+        }
+    }
+
+    /** Rotates automatically when usage is over the configured threshold. */
+    private fun maybeAutoRotate(usedSeconds: Long, freeSeconds: Long) {
+        if (!routerConfig.autoRotate) return
+        if (routerConfig.pppoeAccounts.size < 2) return
+        if (freeSeconds <= 0L) return
+        val percent = usedSeconds * 100.0 / freeSeconds
+        if (percent >= routerConfig.thresholdPercent) {
+            rotateNow()
+        }
+    }
+
+    private fun rotateNow() {
+        val accounts = routerConfig.pppoeAccounts
+        if (accounts.size < 2) {
+            Toast.makeText(this, getString(R.string.need_two_pppoe), Toast.LENGTH_SHORT).show()
+            return
+        }
+        if (isRotating) return
+        isRotating = true
+        Toast.makeText(this, getString(R.string.rotating), Toast.LENGTH_SHORT).show()
+
+        lifecycleScope.launch {
+            val nextIndex = (routerConfig.activeIndex + 1) % accounts.size
+            val next = accounts[nextIndex]
+            val error = TPLinkRouter.loginAndSetPppoe(
+                routerConfig.ip,
+                routerConfig.adminUser,
+                routerConfig.adminPassword,
+                next.username,
+                next.password
+            )
+            if (error.isEmpty()) {
+                routerConfig = routerConfig.copy(activeIndex = nextIndex)
+                saveRouterConfig(this@MainActivity, routerConfig)
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.credentials_rotated, next.username),
+                    Toast.LENGTH_LONG
+                ).show()
+            } else {
+                Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.pppoe_rotate_failed, error),
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+            isRotating = false
+        }
     }
 
 

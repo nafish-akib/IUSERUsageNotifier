@@ -1,0 +1,30 @@
+{
+    "portal": {
+        "base_url": "http://10.220.20.12"
+    },
+    "router": {
+        "ip": "192.168.0.1",
+        "admin_user": "admin",
+        "admin_pass": "admin"
+    },
+    "credentials": [
+        {
+            "username": "your_iuser_username_1",
+            "password": "your_iuser_password_1"
+        },
+        {
+            "username": "your_iuser_username_2",
+            "password": "your_iuser_password_2"
+        },
+        {
+            "username": "your_iuser_username_3",
+            "password": "your_iuser_password_3"
+        },
+        {
+            "username": "your_iuser_username_4",
+            "password": "your_iuser_password_4"
+        }
+    ],
+    "threshold_percent": 90,
+    "cooldown_hours": 12
+}

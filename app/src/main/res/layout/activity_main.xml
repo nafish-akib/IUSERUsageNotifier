@@ -215,6 +215,13 @@
             android:layout_height="wrap_content"
             android:text="@string/sis_webview"
             android:layout_marginTop="8dp"/>
+
+        <Button
+            android:id="@+id/btnRouterSettings"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/router_settings"
+            android:layout_marginTop="8dp"/>
     </LinearLayout>
 
 </androidx.drawerlayout.widget.DrawerLayout>

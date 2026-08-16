@@ -57,6 +57,28 @@
     <string name="error_fetching_usage">Error fetching usage.</string>
     <string name="connect_to_iut_wifi">Connect to IUT WiFi</string>
 
+    <!-- Router / PPPoE rotation -->
+    <string name="router_settings">Router Settings</string>
+    <string name="router_ip_hint">Router IP</string>
+    <string name="router_admin_user_hint">Router Admin Username</string>
+    <string name="router_admin_password_hint">Router Admin Password</string>
+    <string name="auto_rotate_switch">Auto-rotate PPPoE when over limit</string>
+    <string name="threshold_hint">Rotate at usage % of limit</string>
+    <string name="pppoe_accounts_title">PPPoE Accounts (rotate through)</string>
+    <string name="pppoe_username_hint">IUSER username</string>
+    <string name="pppoe_password_hint">Password</string>
+    <string name="pppoe_add">Add PPPoE Account</string>
+    <string name="pppoe_added">PPPoE account added</string>
+    <string name="pppoe_removed">PPPoE account removed</string>
+    <string name="pppoe_enter_both">Enter username and password</string>
+    <string name="rotate_now">Rotate PPPoE Now</string>
+    <string name="rotating">Rotating PPPoE...</string>
+    <string name="credentials_rotated">PPPoE credentials switched to %1$s</string>
+    <string name="pppoe_rotate_failed">Rotation failed: %1$s</string>
+    <string name="need_two_pppoe">Add at least 2 PPPoE accounts to rotate</string>
+    <string name="enter_router_details">Enter router IP and admin credentials</string>
+    <string name="router_settings_saved">Router settings saved</string>
+
 
 
     <!-- This is the array for display in the spinner -->
