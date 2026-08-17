@@ -306,7 +306,39 @@ def rotate(config, state, force=False):
             log.info("Cooldown active (last rotation %s), skipping.", last.isoformat())
             return False
 
-    idx = next_credential(creds, state["active_index"])
+    if force:
+        # Manual --rotate: always move to the next credential, no usage checks.
+        idx = next_credential(creds, state["active_index"])
+    else:
+        # Smart rotation: check every saved credential and only rotate to one
+        # that is still below the threshold. If ALL are exhausted (or none can
+        # be verified), nothing is rotated so an over-quota account is never
+        # set as the active one.
+        threshold = config.get("threshold_hours", 191.67)
+        idx = None
+        checked = 0
+        for step in range(1, len(creds) + 1):
+            candidate = (state["active_index"] + step) % len(creds)
+            used, free, error = fetch_usage(creds[candidate]["username"],
+                                            creds[candidate]["password"])
+            if error:
+                log.warning("Usage check failed for %s: %s",
+                            creds[candidate]["username"], error)
+                continue
+            checked += 1
+            if free > 0 and used / 3600.0 < threshold:
+                idx = candidate
+                break
+        if idx is None:
+            if checked == 0:
+                log.error("Could not verify any saved credential's usage; "
+                          "not rotating.")
+            else:
+                log.warning("ALL saved credentials are over the threshold "
+                            "(%.1f h). Not rotating - quota exhausted.",
+                            threshold)
+            return False
+
     target = creds[idx]
 
     log.info("Rotating to credential %d: %s", idx + 1, target["username"])

@@ -757,12 +757,26 @@ class MainActivity : AppCompatActivity() {
 
     /** Rotates automatically when usage is over the configured threshold. */
     private fun maybeAutoRotate(usedSeconds: Long, freeSeconds: Long) {
-        if (!routerConfig.autoRotate) return
-        if (routerConfig.pppoeAccounts.size < 2) return
-        if (usedSeconds <= 0L) return
-        val usedHours = usedSeconds / 3600.0
-        if (usedHours >= routerConfig.thresholdHours) {
-            rotateNow()
+        val config = routerConfig
+        lifecycleScope.launch {
+            when (val result = autoRotateIfNeeded(this@MainActivity, config, usedSeconds, freeSeconds)) {
+                is RotateResult.Rotated -> Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.credentials_rotated, result.username),
+                    Toast.LENGTH_LONG
+                ).show()
+                is RotateResult.AllExhausted -> Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.all_pppoe_exhausted),
+                    Toast.LENGTH_LONG
+                ).show()
+                is RotateResult.Failed -> Toast.makeText(
+                    this@MainActivity,
+                    getString(R.string.pppoe_rotate_failed, result.error),
+                    Toast.LENGTH_LONG
+                ).show()
+                else -> {}
+            }
         }
     }
 
@@ -779,23 +793,8 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val nextIndex = (routerConfig.activeIndex + 1) % accounts.size
             val next = accounts[nextIndex]
-            val error = if (routerConfig.type == "deco") {
-                TPLinkDecoRouter.loginAndSetPppoe(
-                    routerConfig.ip,
-                    routerConfig.adminUser,
-                    routerConfig.adminPassword,
-                    next.username,
-                    next.password
-                )
-            } else {
-                TPLinkRouter.loginAndSetPppoe(
-                    routerConfig.ip,
-                    routerConfig.adminUser,
-                    routerConfig.adminPassword,
-                    next.username,
-                    next.password
-                )
-            }
+            // Manual rotation: always the next account, no usage checks.
+            val error = rotateRouter(routerConfig, next.username, next.password)
             if (error.isEmpty()) {
                 routerConfig = routerConfig.copy(activeIndex = nextIndex)
                 saveRouterConfig(this@MainActivity, routerConfig)

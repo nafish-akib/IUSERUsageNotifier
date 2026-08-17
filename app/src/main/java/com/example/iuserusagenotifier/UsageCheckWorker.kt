@@ -40,9 +40,25 @@ class UsageCheckWorker(context: Context, workerParams: WorkerParameters) :
                 "Used: ${formatDuration(usageData.used)}"
             }
 
+            // Background auto-rotation: the same smart logic as the app UI.
+            // When the active account is over the threshold, checks every saved
+            // account and rotates only to one that is still below it; if all
+            // are exhausted, nothing is changed.
+            val config = loadRouterConfig(applicationContext)
+            val rotationNote = when (val result =
+                autoRotateIfNeeded(applicationContext, config, usageData.used, usageData.free)) {
+                is RotateResult.Rotated ->
+                    "\n\uD83D\uDD04 ${applicationContext.getString(R.string.rotation_worker_note_rotated, result.username)}"
+                is RotateResult.AllExhausted ->
+                    "\n\uD83D\uDEA8 ${applicationContext.getString(R.string.rotation_worker_note_exhausted)}"
+                is RotateResult.Failed ->
+                    "\n\uD83D\uDD34 ${applicationContext.getString(R.string.rotation_worker_note_failed, result.error)}"
+                else -> ""
+            }
+
             UsageNotifier.sendUsageNotification(
                 applicationContext,
-                message,
+                message + rotationNote,
                 usageData.used,
                 usageData.free
             )

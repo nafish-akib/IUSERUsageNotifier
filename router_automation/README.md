@@ -30,6 +30,15 @@ the next one in the saved list.
 Everything is logged to `monitor.log`. State (active credential index, last
 rotation time) lives in `state.json`.
 
+### Smart rotation
+
+Automatic rotations (the default run, not `--rotate`) never switch to an
+over-quota account: before rotating, the script fetches the usage of every
+saved credential and picks the first one that is still below `threshold_hours`.
+If **all** saved credentials are over the threshold (or none can be verified),
+nothing is rotated and the current credentials are left untouched — a warning
+is logged instead.
+
 ## Supported router
 
 The driver talks to the **TP-Link CGI interface** used by the TL-WR845N (and
