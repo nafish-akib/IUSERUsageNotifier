@@ -11,14 +11,16 @@ import android.widget.ProgressBar
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.swiperefreshlayout.widget.SwipeRefreshLayout
-import java.net.URLEncoder
-import java.nio.charset.Charset
+import org.json.JSONObject
 
 class IUserWebActivity : AppCompatActivity() {
 
     private lateinit var webView: WebView
     private lateinit var swipeRefreshLayout: SwipeRefreshLayout
     private lateinit var progressBar: ProgressBar
+
+    // Auto-login once per activity, so a failed login doesn't loop.
+    private var autoLoggedIn = false
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -33,6 +35,12 @@ class IUserWebActivity : AppCompatActivity() {
         // Enabling JavaScript.
         val settings: WebSettings = webView.settings
         settings.javaScriptEnabled = true
+        settings.domStorageEnabled = true
+
+        // Using shared preferences to determine if we have credentials.
+        val sharedPreferences = getSharedPreferences("IUSER_PREFS", MODE_PRIVATE)
+        val username = sharedPreferences.getString("username", "") ?: ""
+        val password = sharedPreferences.getString("password", "") ?: ""
 
         // Setting up the WebViewClient to show a loading indicator.
         webView.webViewClient = object : WebViewClient() {
@@ -47,6 +55,23 @@ class IUserWebActivity : AppCompatActivity() {
                 progressBar.visibility = View.GONE
                 swipeRefreshLayout.isRefreshing = false
                 super.onPageFinished(view, url)
+
+                // The portal login page is a Laravel form (CSRF token included).
+                // Submit it through the form itself so the token is sent along.
+                if (!autoLoggedIn && username.isNotEmpty() && password.isNotEmpty() &&
+                    url?.contains("/login", ignoreCase = true) == true
+                ) {
+                    autoLoggedIn = true
+                    val userLiteral = JSONObject.quote(username)
+                    val passLiteral = JSONObject.quote(password)
+                    view?.evaluateJavascript(
+                        "var u=document.querySelector('input[name=\"username\"]');" +
+                            "var p=document.querySelector('input[name=\"password\"]');" +
+                            "var f=document.querySelector('form');" +
+                            "if(u&&p&&f){u.value=$userLiteral;p.value=$passLiteral;f.submit();}",
+                        null
+                    )
+                }
             }
         }
 
@@ -55,21 +80,9 @@ class IUserWebActivity : AppCompatActivity() {
             webView.reload()
         }
 
-        // Using shared preferences to determine if we have credentials.
-        val sharedPreferences = getSharedPreferences("IUSER_PREFS", MODE_PRIVATE)
-        val username = sharedPreferences.getString("username", "") ?: ""
-        val password = sharedPreferences.getString("password", "") ?: ""
-
-        if (username.isNotEmpty() && password.isNotEmpty()) {
-            val postData = "username=${URLEncoder.encode(username, "UTF-8")}" +
-                    "&password=${URLEncoder.encode(password, "UTF-8")}"
-            webView.postUrl(
-                "http://10.220.20.12/index.php/home/loginProcess",
-                postData.toByteArray(Charset.forName("UTF-8"))
-            )
-        } else {
-            webView.loadUrl("http://10.220.20.12/index.php/home")
-        }
+        // The current portal root: GET /login shows the login form; after the
+        // auto-submit above it lands on the dashboard.
+        webView.loadUrl("http://10.220.20.12/login")
 
         // Using OnBackPressedDispatcher for proper back navigation.
         onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {

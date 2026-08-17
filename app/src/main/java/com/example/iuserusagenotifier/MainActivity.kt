@@ -45,6 +45,7 @@ import androidx.work.WorkManager
 import com.google.android.material.button.MaterialButton
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.google.gson.Gson
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.async
@@ -627,8 +628,11 @@ class MainActivity : AppCompatActivity() {
     @SuppressLint("SetTextI18n")
     private fun showRouterSettingsDialog() {
         val dialogView = layoutInflater.inflate(R.layout.dialog_router_settings, null)
+        val routerTypeSpinner = dialogView.findViewById<Spinner>(R.id.routerTypeSpinner)
         val routerIp = dialogView.findViewById<TextInputEditText>(R.id.routerIp)
+        val adminUserLayout = dialogView.findViewById<TextInputLayout>(R.id.routerAdminUserLayout)
         val adminUser = dialogView.findViewById<TextInputEditText>(R.id.routerAdminUser)
+        val adminPasswordLayout = dialogView.findViewById<TextInputLayout>(R.id.routerAdminPasswordLayout)
         val adminPassword = dialogView.findViewById<TextInputEditText>(R.id.routerAdminPassword)
         val autoRotate = dialogView.findViewById<Switch>(R.id.autoRotateSwitch)
         val threshold = dialogView.findViewById<TextInputEditText>(R.id.thresholdInput)
@@ -636,6 +640,28 @@ class MainActivity : AppCompatActivity() {
         val pppoeUser = dialogView.findViewById<TextInputEditText>(R.id.pppoeUserInput)
         val pppoePass = dialogView.findViewById<TextInputEditText>(R.id.pppoePassInput)
         val rotateNowButton = dialogView.findViewById<MaterialButton>(R.id.rotateNowButton)
+
+        val typeAdapter = ArrayAdapter(
+            this,
+            R.layout.spinner_item,
+            arrayOf(getString(R.string.router_type_cgi), getString(R.string.router_type_deco))
+        )
+        typeAdapter.setDropDownViewResource(android.R.layout.simple_spinner_dropdown_item)
+        routerTypeSpinner.adapter = typeAdapter
+        routerTypeSpinner.setSelection(if (routerConfig.type == "deco") 1 else 0)
+        val updateTypeHints = {
+            val deco = routerTypeSpinner.selectedItemPosition == 1
+            adminUserLayout.hint = getString(if (deco) R.string.tplink_id_hint else R.string.router_admin_user_hint)
+            adminPasswordLayout.hint = getString(if (deco) R.string.tplink_id_password_hint else R.string.router_admin_password_hint)
+        }
+        updateTypeHints()
+        routerTypeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
+            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
+                updateTypeHints()
+            }
+
+            override fun onNothingSelected(parent: AdapterView<*>?) {}
+        }
 
         routerIp.setText(routerConfig.ip)
         adminUser.setText(routerConfig.adminUser)
@@ -709,6 +735,7 @@ class MainActivity : AppCompatActivity() {
                     return@setOnClickListener
                 }
                 routerConfig = routerConfig.copy(
+                    type = if (routerTypeSpinner.selectedItemPosition == 1) "deco" else "cgi",
                     ip = newIp,
                     adminUser = newUser,
                     adminPassword = newPass,
@@ -752,13 +779,23 @@ class MainActivity : AppCompatActivity() {
         lifecycleScope.launch {
             val nextIndex = (routerConfig.activeIndex + 1) % accounts.size
             val next = accounts[nextIndex]
-            val error = TPLinkRouter.loginAndSetPppoe(
-                routerConfig.ip,
-                routerConfig.adminUser,
-                routerConfig.adminPassword,
-                next.username,
-                next.password
-            )
+            val error = if (routerConfig.type == "deco") {
+                TPLinkDecoRouter.loginAndSetPppoe(
+                    routerConfig.ip,
+                    routerConfig.adminUser,
+                    routerConfig.adminPassword,
+                    next.username,
+                    next.password
+                )
+            } else {
+                TPLinkRouter.loginAndSetPppoe(
+                    routerConfig.ip,
+                    routerConfig.adminUser,
+                    routerConfig.adminPassword,
+                    next.username,
+                    next.password
+                )
+            }
             if (error.isEmpty()) {
                 routerConfig = routerConfig.copy(activeIndex = nextIndex)
                 saveRouterConfig(this@MainActivity, routerConfig)

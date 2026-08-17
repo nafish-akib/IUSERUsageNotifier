@@ -10,11 +10,24 @@
         android:orientation="vertical"
         android:padding="16dp">
 
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="@string/router_type_label"
+            android:textAppearance="?android:attr/textAppearanceMedium" />
+
+        <Spinner
+            android:id="@+id/routerTypeSpinner"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp" />
+
         <com.google.android.material.textfield.TextInputLayout
             android:id="@+id/routerIpLayout"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="@string/router_ip_hint">
+            android:hint="@string/router_ip_hint"
+            android:layout_marginTop="8dp">
             <com.google.android.material.textfield.TextInputEditText
                 android:id="@+id/routerIp"
                 android:layout_width="match_parent"

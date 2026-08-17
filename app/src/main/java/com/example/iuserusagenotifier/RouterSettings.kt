@@ -13,6 +13,7 @@ import com.google.gson.reflect.TypeToken
  * [activeIndex] + 1).
  */
 data class RouterConfig(
+    val type: String = "cgi",
     val ip: String = "192.168.0.1",
     val adminUser: String = "admin",
     val adminPassword: String = "",

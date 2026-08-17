@@ -59,9 +59,14 @@
 
     <!-- Router / PPPoE rotation -->
     <string name="router_settings">Router Settings</string>
+    <string name="router_type_label">Router Model</string>
+    <string name="router_type_cgi">TP-Link (CGI — WR845N &amp; classic)</string>
+    <string name="router_type_deco">TP-Link Deco (TPM5)</string>
     <string name="router_ip_hint">Router IP</string>
     <string name="router_admin_user_hint">Router Admin Username</string>
     <string name="router_admin_password_hint">Router Admin Password</string>
+    <string name="tplink_id_hint">TP-Link ID (email)</string>
+    <string name="tplink_id_password_hint">TP-Link ID password</string>
     <string name="auto_rotate_switch">Auto-rotate PPPoE when over limit</string>
     <string name="threshold_hint">Rotate when usage reaches (hours)</string>
     <string name="pppoe_accounts_title">PPPoE Accounts (rotate through)</string>
