@@ -29,5 +29,7 @@
         }
     ],
     "threshold_hours": 191.67,
-    "cooldown_hours": 12
+    "cooldown_hours": 12,
+    "dummy_user": "00000000",
+    "dummy_pass": "00000000"
 }

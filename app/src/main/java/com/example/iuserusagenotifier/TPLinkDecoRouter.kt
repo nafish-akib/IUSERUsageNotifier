@@ -55,6 +55,79 @@ object TPLinkDecoRouter {
         newPppoeUser: String,
         newPppoePassword: String
     ): String = withContext(Dispatchers.IO) {
+        try {
+            withTmpSession(ip, tplinkId, tplinkIdPassword) { tmpl ->
+                // Read the current WAN config.
+                val getReply = tmpl.request(OP_IPV4_GET, null)
+                    ?: return@withTmpSession "IPV4_GET returned no data"
+                val root = JsonParser.parseString(getReply.toString(Charsets.UTF_8)).asJsonObject
+                val wan = root.getAsJsonObject("wan")
+                    ?: return@withTmpSession "IPV4_GET: no \"wan\" object in response"
+
+                // Patch the PPPoE credentials (base64, like the app).
+                val userInfo = if (wan.has("user_info") && wan.get("user_info").isJsonObject) {
+                    wan.getAsJsonObject("user_info")
+                } else {
+                    JsonObject()
+                }
+                userInfo.addProperty(
+                    "username",
+                    Base64.encodeToString(newPppoeUser.toByteArray(), Base64.NO_WRAP)
+                )
+                userInfo.addProperty(
+                    "password",
+                    Base64.encodeToString(newPppoePassword.toByteArray(), Base64.NO_WRAP)
+                )
+                userInfo.addProperty("auto_config", true)
+                wan.add("user_info", userInfo)
+                wan.addProperty("dial_type", "PPPOE_V4")
+
+                val setPayload = JsonObject().apply { add("wan", wan) }.toString()
+                    .toByteArray(Charsets.UTF_8)
+                tmpl.request(OP_IPV4_SET, setPayload)
+                    ?: return@withTmpSession "IPV4_SET returned no data"
+                "PPPoE credentials switched (verify on the Deco app status page)"
+            } ?: "❌ Deco router unreachable (check IP / TP-Link ID credentials)"
+        } catch (e: Exception) {
+            "❌ ${e.localizedMessage ?: "Unexpected error"}"
+        }
+    }
+
+    /**
+     * Reads the PPPoE username currently configured on the Deco (decoded from
+     * the base64 user_info.username of IPV4_GET), or null on failure.
+     */
+    suspend fun getActivePppoeUsername(
+        ip: String,
+        tplinkId: String,
+        tplinkIdPassword: String
+    ): String? = withContext(Dispatchers.IO) {
+        try {
+            withTmpSession(ip, tplinkId, tplinkIdPassword) { tmpl ->
+                val reply = tmpl.request(OP_IPV4_GET, null) ?: return@withTmpSession null
+                val root = JsonParser.parseString(reply.toString(Charsets.UTF_8)).asJsonObject
+                val userInfo = root.getAsJsonObject("wan")?.getAsJsonObject("user_info")
+                    ?: return@withTmpSession null
+                val encoded = userInfo.get("username")?.asString
+                    ?: return@withTmpSession null
+                String(Base64.decode(encoded, Base64.NO_WRAP), Charsets.UTF_8)
+            }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
+     * Opens the SSH + TMP session, allocates/verifies the token, runs [block]
+     * and frees the token on the way out. Returns block's result, or null if
+     * the session could not be established.
+     */
+    private suspend fun <T> withTmpSession(
+        ip: String,
+        tplinkId: String,
+        tplinkIdPassword: String,
+        block: (Tmpl) -> T
+    ): T? = withContext(Dispatchers.IO) {
         var session: Session? = null
         var localPort = 0
         try {
@@ -70,41 +143,10 @@ object TPLinkDecoRouter {
             Socket("127.0.0.1", localPort).use { socket ->
                 socket.soTimeout = TIMEOUT_MS
                 val tmpl = Tmpl(socket.getInputStream(), socket.getOutputStream())
+                val token = tmpl.request(OP_ALLOC_TOKEN, null) ?: return@use null
+                tmpl.request(OP_VERIFY_TOKEN, token)
                 try {
-                    // Open the session: alloc + verify token.
-                    val token = tmpl.request(OP_ALLOC_TOKEN, null)
-                        ?: return@withContext "Token allocation failed"
-                    tmpl.request(OP_VERIFY_TOKEN, token)
-
-                    // Read the current WAN config.
-                    val getReply = tmpl.request(OP_IPV4_GET, null)
-                        ?: return@withContext "IPV4_GET returned no data"
-                    val root = JsonParser.parseString(getReply.toString(Charsets.UTF_8)).asJsonObject
-                    val wan = root.getAsJsonObject("wan")
-                        ?: return@withContext "IPV4_GET: no \"wan\" object in response"
-
-                    // Patch the PPPoE credentials (base64, like the app).
-                    val userInfo = if (wan.has("user_info") && wan.get("user_info").isJsonObject) {
-                        wan.getAsJsonObject("user_info")
-                    } else {
-                        JsonObject()
-                    }
-                    userInfo.addProperty(
-                        "username",
-                        Base64.encodeToString(newPppoeUser.toByteArray(), Base64.NO_WRAP)
-                    )
-                    userInfo.addProperty(
-                        "password",
-                        Base64.encodeToString(newPppoePassword.toByteArray(), Base64.NO_WRAP)
-                    )
-                    userInfo.addProperty("auto_config", true)
-                    wan.add("user_info", userInfo)
-                    wan.addProperty("dial_type", "PPPOE_V4")
-
-                    val setPayload = JsonObject().apply { add("wan", wan) }.toString()
-                        .toByteArray(Charsets.UTF_8)
-                    tmpl.request(OP_IPV4_SET, setPayload)
-                        ?: return@withContext "IPV4_SET returned no data"
+                    return@use block(tmpl)
                 } finally {
                     try {
                         tmpl.request(OP_FREE_TOKEN, null)
@@ -113,9 +155,8 @@ object TPLinkDecoRouter {
                     }
                 }
             }
-            "PPPoE credentials switched (verify on the Deco app status page)"
         } catch (e: Exception) {
-            "❌ ${e.localizedMessage ?: "Unexpected error"}"
+            null
         } finally {
             try {
                 session?.delPortForwardingL(localPort)

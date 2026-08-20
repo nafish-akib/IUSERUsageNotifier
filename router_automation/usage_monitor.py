@@ -271,6 +271,40 @@ class TPLinkCgi:
         except requests.RequestException as e:
             return f"Router request failed: {e}"
 
+    def get_active_username(self):
+        """Returns the PPPoE username currently configured on the router.
+
+        The CGI GET of the PPPoE connection config includes the live username,
+        so this tells us which account the router is really dialing with -
+        no local state needed, which keeps multiple phones in sync.
+        """
+        try:
+            intf = self._cgi(ACT_GL, "WAN_COMMON_INTF_CFG", STACK_NULL, ["WANAccessType"])
+            eth_stack = next(
+                (i["__stack"] for i in intf if i.get("WANAccessType") == "Ethernet"),
+                None,
+            )
+            if not eth_stack:
+                log.error("Ethernet WAN interface not found")
+                return None
+
+            ppp = self._cgi(ACT_GL, "WAN_PPP_CONN", STACK_NULL, ["enable"])
+            ppp_stack = next(
+                (i["__stack"] for i in ppp if i.get("enable") == "1"),
+                ppp[0]["__stack"] if ppp else None,
+            )
+            if not ppp_stack:
+                log.error("PPPoE connection not found")
+                return None
+
+            current = self._cgi(ACT_GET, "WAN_PPP_CONN", ppp_stack, [])
+            current = current[0] if current else {}
+            username = current.get("username")
+            return username if username else None
+        except requests.RequestException as e:
+            log.error("Could not read router state: %s", e)
+            return None
+
 
 def rotator_for(config):
     router_cfg = config["router"]
@@ -287,71 +321,127 @@ def rotator_for(config):
 # Rotation logic
 # ---------------------------------------------------------------------------
 
-def next_credential(creds, active_index):
-    return (active_index + 1) % len(creds)
+def rotate(config, state, force=False, dry_run=False):
+    """Smart rotation driven by the router's ACTUAL active PPPoE account.
 
+    Reads the PPPoE username currently set on the router, fetches ITS usage
+    and only rotates when that account has crossed the threshold. Never
+    switches to an over-quota account; when every saved account is exhausted
+    it sets dummy credentials (kills PPPoE so no billable usage accrues).
+    In dry-run mode nothing is written to the router.
 
-def rotate(config, state, force=False):
+    This is safe for multiple phones sharing one router: every device reads
+    the same router state, so they all agree on which account is active
+    instead of trusting a local index.
+    """
     creds = config["credentials"]
-    router_cfg = config["router"]
+    threshold = config.get("threshold_hours", 191.67)
+    dummy_user = config.get("dummy_user", "00000000")
+    dummy_pass = config.get("dummy_pass", "00000000")
 
     if len(creds) < 2:
         log.warning("Need at least 2 PPPoE credentials to rotate.")
         return False
 
     cooldown_hours = config.get("cooldown_hours", 12)
-    if not force and state.get("last_rotation"):
+    if not force and not dry_run and state.get("last_rotation"):
         last = datetime.fromisoformat(state["last_rotation"])
         if datetime.now() - last < timedelta(hours=cooldown_hours):
             log.info("Cooldown active (last rotation %s), skipping.", last.isoformat())
             return False
 
-    if force:
-        # Manual --rotate: always move to the next credential, no usage checks.
-        idx = next_credential(creds, state["active_index"])
-    else:
-        # Smart rotation: check every saved credential and only rotate to one
-        # that is still below the threshold. If ALL are exhausted (or none can
-        # be verified), nothing is rotated so an over-quota account is never
-        # set as the active one.
-        threshold = config.get("threshold_hours", 191.67)
-        idx = None
-        checked = 0
-        for step in range(1, len(creds) + 1):
-            candidate = (state["active_index"] + step) % len(creds)
-            used, free, error = fetch_usage(creds[candidate]["username"],
-                                            creds[candidate]["password"])
-            if error:
-                log.warning("Usage check failed for %s: %s",
-                            creds[candidate]["username"], error)
-                continue
-            checked += 1
-            if free > 0 and used / 3600.0 < threshold:
-                idx = candidate
-                break
-        if idx is None:
-            if checked == 0:
-                log.error("Could not verify any saved credential's usage; "
-                          "not rotating.")
-            else:
-                log.warning("ALL saved credentials are over the threshold "
-                            "(%.1f h). Not rotating - quota exhausted.",
-                            threshold)
-            return False
-
-    target = creds[idx]
-
-    log.info("Rotating to credential %d: %s", idx + 1, target["username"])
     router = rotator_for(config)
     if not router.login():
         log.error("Router login failed (check ip/admin credentials in config.json).")
         return False
 
+    active_user = router.get_active_username()
+    if active_user is None:
+        log.error("Could not determine the active PPPoE account from the router.")
+        return False
+
+    # Router is already on dummy: self-heal once a saved account drops below
+    # the threshold again (e.g. after the monthly quota reset).
+    if active_user == dummy_user:
+        target_idx = _first_under_threshold(creds, None, threshold)
+        if target_idx is None:
+            log.warning("Router is on dummy credentials and no saved account is "
+                        "under the threshold yet.")
+            return True
+        log.info("Dummy active but %s is under the threshold - recovering.",
+                 creds[target_idx]["username"])
+        return _apply_rotation(router, config, state, creds, target_idx, dry_run)
+
+    active_idx = next(
+        (i for i, c in enumerate(creds) if c["username"] == active_user), None)
+    if active_idx is None:
+        log.error("Router active account %r is not in the saved credentials list.",
+                  active_user)
+        return False
+
+    used, free, error = fetch_usage(creds[active_idx]["username"],
+                                    creds[active_idx]["password"])
+    if error:
+        log.warning("Usage fetch failed for active account %s: %s",
+                    active_user, error)
+        return False
+
+    if not force and used / 3600.0 < threshold:
+        log.info("Active account %s is below the threshold (%.1f h); no rotation.",
+                 active_user, used / 3600.0)
+        return True
+
+    target_idx = _first_under_threshold(creds, active_idx, threshold)
+    if target_idx is None:
+        log.warning("ALL saved credentials are over the threshold (%.1f h); "
+                    "setting dummy credentials.", threshold)
+        if dry_run:
+            log.info("[dry-run] would set dummy credentials (%s)", dummy_user)
+            return True
+        error = router.set_pppoe(dummy_user, dummy_pass)
+        if error:
+            log.error("Failed to set dummy credentials: %s", error)
+            return False
+        state["last_rotation"] = datetime.now().isoformat()
+        save_state(state)
+        log.warning("Dummy credentials set - no internet until an account "
+                    "is under the limit again.")
+        return True
+
+    return _apply_rotation(router, config, state, creds, target_idx, dry_run)
+
+
+def _first_under_threshold(creds, start_idx, threshold):
+    """First saved account still below the threshold, cycling after start_idx.
+
+    start_idx=None searches every account from the beginning. Returns the index
+    or None. Accounts whose usage could not be fetched are skipped - we never
+    rotate to an unverifiable account.
+    """
+    order = range(len(creds)) if start_idx is None else range(1, len(creds) + 1)
+    for step in order:
+        idx = step if start_idx is None else (start_idx + step) % len(creds)
+        used, free, error = fetch_usage(creds[idx]["username"],
+                                        creds[idx]["password"])
+        if error:
+            log.warning("Usage check failed for %s: %s",
+                        creds[idx]["username"], error)
+            continue
+        if free > 0 and used / 3600.0 < threshold:
+            return idx
+    return None
+
+
+def _apply_rotation(router, config, state, creds, idx, dry_run):
+    target = creds[idx]
+    log.info("Rotating to credential %d: %s", idx + 1, target["username"])
+    if dry_run:
+        log.info("[dry-run] would rotate to %s", target["username"])
+        return True
     error = router.set_pppoe(target["username"], target["password"])
     if error:
         log.error("PPPoE update failed: %s", error)
         return False
-
     state["active_index"] = idx
     state["last_rotation"] = datetime.now().isoformat()
     save_state(state)
@@ -377,9 +467,12 @@ def main():
     if not creds:
         log.error("No credentials in config.json")
         sys.exit(2)
-    active = creds[state["active_index"]]
+    active_idx = state.get("active_index", 0)
+    if active_idx < 0 or active_idx >= len(creds):
+        active_idx = 0
+    active = creds[active_idx]
 
-    log.info("Active credential: %s", active["username"])
+    log.info("Portal-report account: %s", active["username"])
     used, free, error = fetch_usage(active["username"], active["password"])
     if error:
         log.warning("Usage fetch failed: %s", error)
@@ -395,21 +488,9 @@ def main():
         rotate(config, state, force=True)
         return
 
-    # Default: rotate when over threshold (or dry-run report).
-    threshold_hours = config.get("threshold_hours", 190.0)
-    if error:
-        log.info("No rotation: usage could not be fetched.")
-        return
-    used_hours = used / 3600.0
-    if used_hours >= threshold_hours:
-        if args.dry_run:
-            target = creds[next_credential(creds, state["active_index"])]
-            log.info("[dry-run] Would rotate to %s", target["username"])
-        else:
-            rotate(config, state)
-    else:
-        log.info("Usage %.1fh below threshold %.1fh, no rotation needed.",
-                 used_hours, threshold_hours)
+    # Default: consult the router - read the ACTIVE PPPoE account, fetch its
+    # usage and rotate only when it crossed the threshold (or dry-run report).
+    rotate(config, state, dry_run=args.dry_run)
 
 
 if __name__ == "__main__":

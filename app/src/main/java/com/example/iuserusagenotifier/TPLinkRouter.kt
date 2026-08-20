@@ -93,6 +93,42 @@ object TPLinkRouter {
     }
 
     /**
+     * Reads the PPPoE username currently configured on the router (the CGI GET
+     * of the PPPoE connection includes the live username), or null on failure.
+     * This is how the app learns which account the router is really dialing
+     * with, so rotation never has to trust a local index.
+     */
+    suspend fun getActivePppoeUsername(
+        ip: String,
+        adminUser: String,
+        adminPassword: String
+    ): String? = withContext(Dispatchers.IO) {
+        val client = OkHttpClient.Builder()
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(15, TimeUnit.SECONDS)
+            .build()
+        val auth = "Basic " + Base64.encodeToString(
+            "$adminUser:$adminPassword".toByteArray(),
+            Base64.NO_WRAP
+        )
+
+        try {
+            val intfList = cgi(client, ip, auth, ACTION_GL, OID_COMMON_INTF, STACK_NULL, listOf("WANAccessType"))
+            val ethStack = intfList.firstOrNull { it.fields["WANAccessType"] == "Ethernet" }?.stack
+                ?: return@withContext null
+            val pppList = cgi(client, ip, auth, ACTION_GL, OID_PPP_CONN, STACK_NULL, listOf("enable"))
+            val pppStack = pppList.firstOrNull { it.fields["enable"] == "1" }?.stack
+                ?: pppList.firstOrNull()?.stack
+                ?: return@withContext null
+            val current = cgi(client, ip, auth, ACTION_GET, OID_PPP_CONN, pppStack)
+                .firstOrNull() ?: return@withContext null
+            current.fields["username"]?.takeIf { it.isNotEmpty() }
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /**
      * Runs one CGI action. [attrs] may be plain names (for GL) or `key=value`
      * lines (for GET/SET attribute requests). Returns parsed instances, or an
      * instance holding "error" if the router reported a failure.

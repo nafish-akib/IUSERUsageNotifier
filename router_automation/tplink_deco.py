@@ -263,6 +263,24 @@ class TPLinkDeco:
         except Exception as e:  # noqa: BLE001
             return f"Router request failed: {e}"
 
+    def get_active_username(self):
+        """Returns the PPPoE username currently configured on the Deco.
+
+        The IPV4_GET response carries user_info.username base64-encoded; we
+        decode it so the caller can compare it against the saved accounts
+        without trusting any local index.
+        """
+        try:
+            wan = self.get_wan()
+            user_info = wan.get("user_info") or {}
+            raw = user_info.get("username")
+            if not raw:
+                return None
+            return base64.b64decode(raw).decode("utf-8")
+        except Exception as e:  # noqa: BLE001
+            log.error("Could not read Deco WAN config: %s", e)
+            return None
+
     def close(self):
         try:
             if self._token is not None:

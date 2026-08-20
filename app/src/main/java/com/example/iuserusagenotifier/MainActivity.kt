@@ -347,8 +347,9 @@ class MainActivity : AppCompatActivity() {
                         (usageData.used / 60L).toFloat(),
                         maxMinutes.toFloat()
                     )
-                    // Auto-rotate the router PPPoE credentials when over the limit.
-                    maybeAutoRotate(usageData.used, usageData.free)
+                    // Auto-rotate the router PPPoE credentials when the
+                    // router's active account is over the limit.
+                    maybeAutoRotate()
                 } else {
                     usageIndicatorView.showErrorMessage(usageData.message)
                 }
@@ -755,17 +756,17 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    /** Rotates automatically when usage is over the configured threshold. */
-    private fun maybeAutoRotate(usedSeconds: Long, freeSeconds: Long) {
+    /** Checks the router's active account and rotates it when over the limit. */
+    private fun maybeAutoRotate() {
         val config = routerConfig
         lifecycleScope.launch {
-            when (val result = autoRotateIfNeeded(this@MainActivity, config, usedSeconds, freeSeconds)) {
+            when (val result = autoRotateIfNeeded(this@MainActivity, config)) {
                 is RotateResult.Rotated -> Toast.makeText(
                     this@MainActivity,
                     getString(R.string.credentials_rotated, result.username),
                     Toast.LENGTH_LONG
                 ).show()
-                is RotateResult.AllExhausted -> Toast.makeText(
+                is RotateResult.DummySet, is RotateResult.AllExhausted -> Toast.makeText(
                     this@MainActivity,
                     getString(R.string.all_pppoe_exhausted),
                     Toast.LENGTH_LONG
@@ -775,7 +776,7 @@ class MainActivity : AppCompatActivity() {
                     getString(R.string.pppoe_rotate_failed, result.error),
                     Toast.LENGTH_LONG
                 ).show()
-                else -> {}
+                else -> {} // NotNeeded / NoAccounts / RouterUnreachable: silent
             }
         }
     }

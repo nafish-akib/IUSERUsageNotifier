@@ -20,7 +20,9 @@ data class RouterConfig(
     val autoRotate: Boolean = true,
     val thresholdHours: Double = 191.67,
     val pppoeAccounts: List<Account> = emptyList(),
-    val activeIndex: Int = 0
+    val activeIndex: Int = 0,
+    val dummyUser: String = "00000000",
+    val dummyPass: String = "00000000"
 )
 
 private const val PREFS_ROUTER = "IUSER_ROUTER"

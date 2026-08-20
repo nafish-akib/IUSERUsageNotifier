@@ -32,12 +32,21 @@ rotation time) lives in `state.json`.
 
 ### Smart rotation
 
-Automatic rotations (the default run, not `--rotate`) never switch to an
-over-quota account: before rotating, the script fetches the usage of every
-saved credential and picks the first one that is still below `threshold_hours`.
-If **all** saved credentials are over the threshold (or none can be verified),
-nothing is rotated and the current credentials are left untouched — a warning
-is logged instead.
+The rotation is driven by the router's **actual** state, not a local index
+(this matters when several phones/PCs share one router — every device reads
+the same router state, so they all agree instead of fighting over an index):
+
+1. Read the PPPoE username currently set on the router (CGI GET or Deco
+   `IPV4_GET`).
+2. Fetch **that** account's usage from the portal.
+3. Only if it crossed `threshold_hours`: switch to the next saved account
+   that is still below the threshold (never to an over-quota one).
+4. If **all** saved accounts are over the threshold, dummy credentials
+   (`dummy_user`/`dummy_pass`, default `00000000`) are set so no billable
+   usage accrues — and once any account drops below the threshold again
+   (e.g. after the monthly reset), the script automatically recovers.
+5. `--rotate` forces the check (skips cooldown), `--dry-run` reports what
+   would happen without touching the router.
 
 ## Supported router
 

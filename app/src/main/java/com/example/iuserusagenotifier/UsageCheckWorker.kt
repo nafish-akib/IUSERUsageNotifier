@@ -40,20 +40,23 @@ class UsageCheckWorker(context: Context, workerParams: WorkerParameters) :
                 "Used: ${formatDuration(usageData.used)}"
             }
 
-            // Background auto-rotation: the same smart logic as the app UI.
-            // When the active account is over the threshold, checks every saved
-            // account and rotates only to one that is still below it; if all
-            // are exhausted, nothing is changed.
+            // Background auto-rotation: reads the router's ACTUAL active PPPoE
+            // account, fetches its usage and rotates only when it crossed the
+            // threshold. If all saved accounts are exhausted, dummy credentials
+            // are set so no billable usage accrues. Nothing happens when the
+            // router is unreachable (e.g. not on the room Wi-Fi).
             val config = loadRouterConfig(applicationContext)
             val rotationNote = when (val result =
-                autoRotateIfNeeded(applicationContext, config, usageData.used, usageData.free)) {
+                autoRotateIfNeeded(applicationContext, config)) {
                 is RotateResult.Rotated ->
                     "\n\uD83D\uDD04 ${applicationContext.getString(R.string.rotation_worker_note_rotated, result.username)}"
+                is RotateResult.DummySet ->
+                    "\n\uD83D\uDEA8 ${applicationContext.getString(R.string.rotation_worker_note_dummy)}"
                 is RotateResult.AllExhausted ->
                     "\n\uD83D\uDEA8 ${applicationContext.getString(R.string.rotation_worker_note_exhausted)}"
                 is RotateResult.Failed ->
                     "\n\uD83D\uDD34 ${applicationContext.getString(R.string.rotation_worker_note_failed, result.error)}"
-                else -> ""
+                else -> "" // NotNeeded / NoAccounts / RouterUnreachable: silent
             }
 
             UsageNotifier.sendUsageNotification(

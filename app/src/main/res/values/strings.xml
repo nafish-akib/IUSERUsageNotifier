@@ -83,8 +83,9 @@
     <string name="need_two_pppoe">Add at least 2 PPPoE accounts to rotate</string>
     <string name="enter_router_details">Enter router IP and admin credentials</string>
     <string name="router_settings_saved">Router settings saved</string>
-    <string name="all_pppoe_exhausted">All saved PPPoE accounts are over the limit — no rotation</string>
+    <string name="all_pppoe_exhausted">All PPPoE accounts exhausted — dummy credentials set (no internet)</string>
     <string name="rotation_worker_note_rotated">PPPoE rotated to %1$s</string>
+    <string name="rotation_worker_note_dummy">All PPPoE accounts exhausted — dummy credentials set</string>
     <string name="rotation_worker_note_exhausted">All PPPoE accounts exhausted — no rotation</string>
     <string name="rotation_worker_note_failed">PPPoE rotation failed: %1$s</string>
 
